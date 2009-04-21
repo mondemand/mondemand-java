@@ -27,7 +27,7 @@ public class Client {
 	private String programId = null;
 	private int immediateSendLevel = Level.CRIT;
 	private int noSendLevel = Level.ALL;
-	private ConcurrentHashMap<String,String> contexts = null;
+	private ConcurrentHashMap<String,Context> contexts = null;
 	private ConcurrentHashMap<String,LogMessage> messages = null;
 	private ConcurrentHashMap<String,StatsMessage> stats = null;
 	private Vector<Transport> transports = null;
@@ -41,10 +41,8 @@ public class Client {
 	 * @param programId a string identifying the program that is calling MonDemand
 	 */
 	public Client(String programId) {
-		/* set the error handler if its not set */
-		if(this.errorHandler == null) {
-			this.errorHandler = new DefaultErrorHandler();
-		}		
+		/* set the default error handler */
+		this.errorHandler = new DefaultErrorHandler();
 
 		/* if the program ID is not specified, try to get it from the stack */
 		if(programId == null) {
@@ -54,7 +52,7 @@ public class Client {
 		}		
 		
 		/* setup internal data structures */
-		contexts = new ConcurrentHashMap<String,String>();
+		contexts = new ConcurrentHashMap<String,Context>();
 		messages = new ConcurrentHashMap<String,LogMessage>();
 		stats = new ConcurrentHashMap<String,StatsMessage>();
 		transports = new Vector<Transport>();
@@ -65,13 +63,8 @@ public class Client {
 	 */
 	public void finalize() {
 		// try to flush all logs and stats
-		try {
-			flushLogs();
-		} catch(Exception e) {}
-		
-		try {
-			flushStats();
-		} catch(Exception e) {}
+		flushLogs();
+		flushStats();
 		
 		// clear all the data
 		contexts.clear();
@@ -159,11 +152,15 @@ public class Client {
 	 * Adds contextual data to the client.
 	 */
 	public void addContext(String key, String value) {
+		Context ctxt = new Context();
+		ctxt.setKey(key);
+		ctxt.setValue(value);
+		
 		if(contexts == null) {
-			contexts = new ConcurrentHashMap<String,String>();
+			contexts = new ConcurrentHashMap<String,Context>();
 		}
 		if(key != null && value != null) {
-			contexts.put(key, value);
+			contexts.put(key, ctxt);
 		}
 	}
 	
@@ -183,7 +180,10 @@ public class Client {
 		String retval = null;
 		
 		if(contexts != null && key != null) {
-			retval = (String) contexts.get(key);
+			Context ctxt = (Context) contexts.get(key);
+			if(ctxt != null) {
+				retval = ctxt.getValue();
+			}
 		}
 		
 		return retval;
@@ -196,7 +196,7 @@ public class Client {
      */
     public Enumeration<String> getContextKeys() {
             if (contexts == null) {
-            	contexts = new ConcurrentHashMap<String,String>();
+            	contexts = new ConcurrentHashMap<String,Context>();
             }
             return contexts.keys();
     }

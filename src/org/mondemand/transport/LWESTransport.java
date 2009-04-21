@@ -27,14 +27,29 @@ public class LWESTransport implements Transport {
 	 ***********************/
 	private EventEmitter emitter = null;
 
+	/**
+	 * Creates an initializes a LWES transport.
+	 * @param address the address to send events to, can be a multicast or unicast address
+	 * @param port the port to send events to
+	 * @param networkInterface the network interface to use, or null to specify the default
+	 * @throws TransportException
+	 */
 	public LWESTransport(InetAddress address, int port, InetAddress networkInterface) throws TransportException {
 		this(address, port, networkInterface, 1);
 	}
 
-	
+	/**
+	 * Creates and initializes a LWES transport.
+	 * @param address the address to send events to, can be a multicast or unicast address
+	 * @param port the port to send events to
+	 * @param networkInterface the network interface to use, or null to specify the default
+	 * @param ttl for multicast addresses, the TTL value to use
+	 * @throws TransportException
+	 */
 	public LWESTransport(InetAddress address, int port, InetAddress networkInterface, int ttl) throws TransportException {
 		if(address == null) return;
 		
+		// detect the address type and initialize accordingly
 		if(address.isMulticastAddress()) {
 			MulticastEventEmitter m = new MulticastEventEmitter();
 			m.setMulticastAddress(address);
@@ -60,10 +75,12 @@ public class LWESTransport implements Transport {
 		if(messages == null || contexts == null || emitter == null) return;
 
 		try {
+			// create the event and set parameters
 			Event logMsg = emitter.createEvent(LOG_EVENT, false);
 			logMsg.setString("prog_id", programId);
 			logMsg.setUInt16("num", messages.length);
 		
+			// for each log message, set the appropriate fields
 			for(int i=0; i<messages.length; ++i) {
 				logMsg.setString("f" + i, messages[i].getFilename());
 				logMsg.setUInt32("l" + i, messages[i].getLine());
@@ -75,6 +92,7 @@ public class LWESTransport implements Transport {
 				}
 			}
 			
+			// set the contextual data in the event
 			if(contexts.length > 0) {
 				logMsg.setUInt16("ctxt_num", contexts.length);
 				for(int i=0; i<contexts.length; ++i) {
@@ -83,6 +101,7 @@ public class LWESTransport implements Transport {
 				}
 			}
 			
+			// emit the event
 			emitter.emit(logMsg);
 		} catch(EventSystemException ese) {
 			throw new TransportException("Unable to create event", ese);
@@ -95,16 +114,18 @@ public class LWESTransport implements Transport {
 		if(messages == null || contexts == null || emitter == null) return;
 
 		try {
+			// create the event
 			Event statsMsg = emitter.createEvent(STATS_EVENT, false);
 			statsMsg.setString("prog_id", programId);
 			statsMsg.setUInt16("num", messages.length);
 		
+			// for each statistic, set the values
 			for(int i=0; i<messages.length; ++i) {
 				statsMsg.setString("k" + i, messages[i].getKey());
 				statsMsg.setInt64("l" + i, messages[i].getCounter());
-
 			}
 			
+			// set the contextual data in the event
 			if(contexts.length > 0) {
 				statsMsg.setUInt16("ctxt_num", contexts.length);
 				for(int i=0; i<contexts.length; ++i) {
@@ -113,6 +134,7 @@ public class LWESTransport implements Transport {
 				}
 			}
 			
+			// emit the event
 			emitter.emit(statsMsg);
 		} catch(EventSystemException ese) {
 			throw new TransportException("Unable to create event", ese);

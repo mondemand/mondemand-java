@@ -7,6 +7,9 @@ import org.mondemand.StatsMessage;
 import org.mondemand.Transport;
 
 public class StderrTransport implements Transport {
+	
+	public StderrTransport() {
+	}
 
 	public void sendLogs(String programId, LogMessage[] messages, Context[] contexts) {
 		if(messages == null) return;

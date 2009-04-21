@@ -29,16 +29,14 @@ public class ClassUtils {
     public static String getCallingClass(int depth) {
     	try {
     		StackTraceElement[] st = (new Throwable()).getStackTrace();
-            if (st != null) {
-            	if(depth > st.length) {
-            		return st[st.length-1].getClassName();
-            	} else {
-            		return st[depth].getClassName();
-            	}            	
-            }
-        } catch (Exception e) {
-        	// do nothing, we'll just return the name of this class
-        }
+    		if (st != null) {
+    			if(depth > st.length) {
+    				return st[st.length-1].getClassName();
+    			} else {
+    				return st[depth].getClassName();
+    			}            	
+    		}
+    	} catch(Exception e) {}
 
         return ClassUtils.getMainClass();
     }
@@ -49,19 +47,17 @@ public class ClassUtils {
      * @return the line number of the calling class in the stack
      */
     public static int getCallingLine(int depth) {
-        try {
-        	StackTraceElement[] st = (new Throwable()).getStackTrace();
-            if (st != null) {
-            	if(depth > st.length) {
-            		return st[st.length-1].getLineNumber();
-            	} else {
-            		return st[depth].getLineNumber();
-            	}
-            }
-        } catch (Exception e) {
-        	// do nothing and return zero
-        }
-
+    	try {
+    		StackTraceElement[] st = (new Throwable()).getStackTrace();
+    		if (st != null) {
+    			if(depth > st.length) {
+    				return st[st.length-1].getLineNumber();
+    			} else {
+    				return st[depth].getLineNumber();
+    			}
+    		}
+    	} catch(Exception e) {}
+        
         return 0;
     }
 }
