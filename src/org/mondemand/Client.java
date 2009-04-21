@@ -81,7 +81,9 @@ public class Client {
 		// shutdown all the transports
 		if(transports != null) {
 			for(int i=0; i<transports.size(); ++i) {
-				transports.elementAt(i).shutdown();
+				try {
+					transports.elementAt(i).shutdown();
+				} catch(TransportException e) {}
 			}
 		}
 	}
@@ -765,11 +767,16 @@ public class Client {
     	if(this.messages == null || this.transports == null) return;
     	
     	try {
+    		Context[] contexts = this.contexts.values().toArray(new Context[0]);
     		LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
     		
     		for(int i=0; i<this.transports.size(); ++i) {
     			Transport t = transports.elementAt(i);
-    			t.sendLogs(messages);
+    			try {
+    				t.sendLogs(programId, messages, contexts);
+    			} catch(TransportException te) {
+    				errorHandler.handleError("Error calling Transport.sendLogs()", te);
+    			}
     		}
     	} catch(Exception e) {
     		errorHandler.handleError("Error calling Client.dispatchLogs()", e);
@@ -784,11 +791,16 @@ public class Client {
     	if(this.stats == null || this.transports == null) return;
     	
     	try {
-    		StatsMessage[] messages = stats.values().toArray(new StatsMessage[0]);
+    		Context[] contexts = this.contexts.values().toArray(new Context[0]);
+    		StatsMessage[] messages = this.stats.values().toArray(new StatsMessage[0]);
     		
     		for(int i=0; i<this.transports.size(); ++i) {
     			Transport t = transports.elementAt(i);
-    			t.sendStats(messages);
+    			try {
+    				t.sendStats(programId, messages, contexts);
+    			} catch(TransportException te) {
+    				errorHandler.handleError("Error calling Transport.sendStats()", te);
+    			}
     		}
     	} catch(Exception e) {
     		errorHandler.handleError("Error calling Client.dispatchStats()", e);

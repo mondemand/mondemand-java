@@ -1,16 +1,19 @@
 package org.mondemand.tests;
 
 import org.mondemand.Client;
+import org.mondemand.Context;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
 import org.mondemand.StatsMessage;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
+import org.mondemand.transport.LWESTransport;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.net.InetAddress;
 import java.util.Enumeration;
 
 public class ClientTest {
@@ -118,7 +121,7 @@ public class ClientTest {
 	}
 	
 	@Test
-	public void logMessages() {
+	public void testLogMessages() {
 		client.emerg("emerg");
 		client.alert("alert");
 		client.crit("crit");
@@ -132,13 +135,26 @@ public class ClientTest {
 	}
 	
 	@Test
-	public void logGeneric() {
+	public void testLogGeneric() {
 		client.log("logGeneric", 123, Level.ALERT, null, "Test Message", null);
 		client.flushLogs();
 		assert(transport.logs[0].getFilename().equals("logGeneric"));
 		assert(transport.logs[0].getLine() == 123);
 		assert(transport.logs[0].getLevel() == Level.ALERT);
 		assert(transport.logs[0].getMessage().equals("Test Message"));
+	}
+	
+	@Test
+	public void testLwesTransport() {
+		try {
+			InetAddress address = InetAddress.getLocalHost();
+			Transport t = new LWESTransport(address, 9191, null);
+			client.addTransport(t);
+			for(int i=0; i<1000; ++i) {
+				client.log("testLwesTransport", 123, Level.CRIT, null, "Test Message", null);
+			}
+			client.flushLogs();
+		} catch(Exception e) {}
 	}
 	
 	/**
@@ -151,14 +167,14 @@ public class ClientTest {
 		public LogMessage[] logs = new LogMessage[0];
 		public StatsMessage[] stats = new StatsMessage[0];
 		
-		public void sendLogs(LogMessage[] messages) {
+		public void sendLogs(String programId, LogMessage[] messages, Context[] contexts) {
 			logs = new LogMessage[messages.length];
 			for(int i=0; i<logs.length; ++i) {
 				logs[i] = messages[i];
 			}
 		}
 		
-		public void sendStats(StatsMessage[] messages) {
+		public void sendStats(String programId, StatsMessage[] messages, Context[] contexts) {
 			stats = new StatsMessage[messages.length];
 			for(int i=0; i<stats.length; ++i) {
 				stats[i] = messages[i];
