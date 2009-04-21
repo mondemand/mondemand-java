@@ -363,7 +363,7 @@ public class Client {
      * @param value the value to set this counter to
      */
     public void setKey(String key, int value) {
-    	setKey(key, value);
+    	setKey(key, (long) value);
     }
     
     /**

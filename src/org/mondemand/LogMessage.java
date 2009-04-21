@@ -94,4 +94,8 @@ public class LogMessage implements Serializable {
 		this.traceId = traceId;
 	}
 	
+	public String toString() {
+		return "[" + filename + ":" + line + "] - " + Level.STRINGS[level] + " - " + message + " - " + repeat + "[" + traceId + "]";
+	}
+	
 }

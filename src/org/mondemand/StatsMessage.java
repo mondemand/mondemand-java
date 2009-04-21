@@ -33,4 +33,8 @@ public class StatsMessage implements Serializable {
 	public void setCounter(long counter) {
 		this.counter = counter;
 	}
+	
+	public String toString() {
+		return key + ": counter=" + counter;
+	}
 }
