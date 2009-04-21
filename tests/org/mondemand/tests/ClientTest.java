@@ -18,6 +18,8 @@ import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import java.io.PrintStream;
+import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.util.Enumeration;
 import java.lang.reflect.Field;
@@ -26,6 +28,7 @@ public class ClientTest {
 	private static Client client = new Client("ClientTest");
 	private static boolean transportIsSet = false;
 	private static ClientTestTransport transport = null;
+	private PrintStream oldError = null;
 	
 	// internal structures to play with
 	private Field contexts = null;
@@ -50,10 +53,16 @@ public class ClientTest {
 		stats.setAccessible(true);
 		messages = client.getClass().getDeclaredField("messages");
 		messages.setAccessible(true);
+		
+		oldError = System.err;
+		ByteArrayOutputStream stream = new ByteArrayOutputStream();
+		stream.reset();
+		System.setErr(new PrintStream(stream));
 	}
 
 	@After
 	public void tearDown() throws Exception {
+		System.setErr(oldError);
 	}
 
 	@Test
@@ -224,7 +233,7 @@ public class ClientTest {
 	}
 	
 	@Test
-	public void testStderrTransport() {
+	public void testStderrTransport() throws Exception {
 		Transport t = new StderrTransport();
 		client.addTransport(t);
 		for(int i=0; i<1000; ++i) {
@@ -236,10 +245,23 @@ public class ClientTest {
 		client.setKey("a", 123);
 		client.flushStats();
 		
+		PrintStream currentError = System.err;
+		System.setErr(null);
+		client.log(Level.CRIT, null, "test", null);
+		client.setKey("b", 2);
+		client.flushLogs();
+		client.flushStats();
+		System.setErr(currentError);
+		
 		client.finalize();
 		client = null;
 		
+		t.sendLogs(null, null, null);
+		t.sendStats(null, null, null);
+		
 		client = new Client("ClientTest");
+		client.flushLogs();
+
 	}
 	
 	@Test
@@ -251,10 +273,20 @@ public class ClientTest {
 		InetAddress address = InetAddress.getLocalHost();
 		Transport t = new LWESTransport(address, 9191, null);
 		client.addTransport(t);
+		
+		Transport t2 = new LWESTransport(InetAddress.getLocalHost(), -1, null);
+		client.addTransport(t2);
+		
 		for(int i=0; i<1000; ++i) {
 			client.log("testLwesTransport", 123, Level.CRIT, null, "Test Message", null);
 		}
 		client.flushLogs();
+		
+		client.setNoSendLevel(Level.DEBUG);
+		client.setImmediateSendLevel(Level.ALERT);
+		for(int i=0; i<5000; ++i) {
+			client.warning("repeat in an endless loop");
+		}
 			
 		// test multicast
 		InetAddress maddr = InetAddress.getByName("224.0.0.1");
@@ -269,6 +301,11 @@ public class ClientTest {
 		
 		t.sendLogs(null, null, null);
 		t.sendStats(null,null, null);
+		t.shutdown();
+		
+		client.flushLogs();
+		client.flushStats();
+		t.shutdown();
 	}
 	
 	@Test
