@@ -9,9 +9,14 @@ import org.mondemand.StatsMessage;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
+import org.mondemand.log4j.MonDemandAppender;
 import org.mondemand.transport.StderrTransport;
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
+
+import org.apache.log4j.Logger;
+import org.apache.log4j.spi.LocationInfo;
+import org.apache.log4j.spi.LoggingEvent;
 
 import org.junit.After;
 import org.junit.Before;
@@ -22,6 +27,7 @@ import java.io.PrintStream;
 import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.lang.reflect.Field;
 
 public class ClientTest {
@@ -369,6 +375,78 @@ public class ClientTest {
 		client.finalize();
 		client = null;
 		client = new Client("ClientTest");
+	}
+	
+	@Test
+	public void testAppender() {
+		MonDemandAppender appender = new MonDemandAppender();
+		appender.setProgId("testAppender");
+		assertEquals(appender.getProgId(), "testAppender");
+		appender.setAddress("127.0.0.1");
+		assertEquals(appender.getAddress(), "127.0.0.1");
+		appender.setPort(9191);
+		assertEquals(appender.getPort(), 9191);
+		appender.setInterface(null);
+		assertEquals(appender.getInterface(), null);
+		appender.setTtl(1);
+		assertEquals(appender.getTtl(), 1);
+		appender.setImmediateSendLevel(Level.CRIT);
+		assertEquals(appender.getImmediateSendLevel(), Level.CRIT);
+		assertFalse(appender.requiresLayout());
+		
+		appender.setImmediateSendLevel(Level.DEBUG);
+		
+		appender.setAddress("299293939323213231321321");
+		appender.activateOptions();
+		appender.setAddress("127.0.0.1");
+		appender.activateOptions();
+		
+		HashMap<String,Object> properties = new HashMap<String,Object>();
+		properties.put("key1", "value1");
+
+		LoggingEvent event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.ERROR,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);	
+
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.WARN,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.FATAL,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.INFO,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.DEBUG,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.TRACE,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, null,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		// this breaks the NDC properties
+		properties.put("key1", new java.util.BitSet());
+		event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.INFO,
+				"test", "test", null,
+				"abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
+		appender.doAppend(event);
+		
+		appender.close();
 	}
 	
 	/**
