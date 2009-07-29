@@ -19,15 +19,13 @@
 			<version>1.2.15</version>
 			<scope>compile</scope>
 		</dependency>
-		<!-- 
 		<dependency>
 			<groupId>org.lwes</groupId>
 			<artifactId>lwes-java</artifactId>
 			<type>jar</type>
-			<version>0.0.2</version>
+			<version>0.0.3</version>
 			<scope>runtime</scope>
 		</dependency>
-		-->
 	</dependencies>
 	
 	<!-- build phase -->
