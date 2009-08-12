@@ -142,7 +142,6 @@ public class MonDemandAppender extends AppenderSkeleton {
 	public void close() 
 	{
 		client.flush();
-		client.finalize();
 	}
 	
 	public void activateOptions() {
@@ -169,10 +168,11 @@ public class MonDemandAppender extends AppenderSkeleton {
         	
         	// determine our context values
         	Map<?,?> properties = event.getProperties();
-        	Iterator<?> iterator = properties.keySet().iterator();
+        	Iterator<?> iterator = properties.entrySet().iterator();
         	while(iterator.hasNext()) {
-        		String key = (String) iterator.next();
-        		String value = (String) properties.get(key);
+        		Map.Entry<?,?> entry = (Map.Entry<?,?>) iterator.next();
+        		String key = (String) entry.getKey();
+        		String value = (String) entry.getValue();
         		client.addContext(key, value);
         	}
         	

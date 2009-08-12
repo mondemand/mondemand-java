@@ -1,5 +1,6 @@
 package org.mondemand.transport;
 
+import java.io.IOException;
 import java.net.InetAddress;
 
 import org.mondemand.Context;
@@ -9,6 +10,7 @@ import org.mondemand.Transport;
 import org.mondemand.TransportException;
 
 import org.lwes.Event;
+import org.lwes.EventSystemException;
 import org.lwes.emitter.EventEmitter;
 import org.lwes.emitter.MulticastEventEmitter;
 import org.lwes.emitter.UnicastEventEmitter;
@@ -101,8 +103,10 @@ public class LWESTransport implements Transport {
 			
 			// emit the event
 			emitter.emit(logMsg);
-		} catch(Exception e) {
+		} catch(EventSystemException e) {
 			throw new TransportException("Error sending log event", e);
+		} catch(IOException ie) {
+			throw new TransportException("Error sending log event", ie);
 		}
 	}
 

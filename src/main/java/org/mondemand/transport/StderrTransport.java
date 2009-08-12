@@ -36,7 +36,9 @@ public class StderrTransport implements Transport {
 		for(int i=0; i<messages.length; ++i) {
 			try {
 				System.err.println("[" + messages[i].getKey() + "] " + "counter=" + messages[i].getCounter());
-			} catch(Exception e) {}
+			} catch(Exception e) {
+				// we can't write to stderr, so just give up
+			}
 		}
 	}
 

@@ -1,6 +1,8 @@
 package org.mondemand;
 
-public class TraceId implements Comparable<TraceId> {
+import java.io.Serializable;
+
+public class TraceId implements Serializable, Comparable<TraceId> {
 	  public final static TraceId NULL_TRACE_ID = new TraceId(0);	
 		
 	  /* the internal ID */
@@ -11,7 +13,7 @@ public class TraceId implements Comparable<TraceId> {
 	   * @param id the identifier to use
 	   */
 	  public TraceId(long id) {
-		  if ((new Long(id)) != null) {
+		  if ((Long.valueOf(id)) != null) {
 			  this.id = id;
 		  }
 	  }
@@ -57,5 +59,25 @@ public class TraceId implements Comparable<TraceId> {
 		  } 
 
 		  return 0;
+	  }
+	  
+	  @Override
+	  public boolean equals(Object obj) {
+		  if (obj == null)
+			  return false;
+		  if (getClass() != obj.getClass())
+			  return false;
+		  TraceId other = (TraceId) obj;
+		  if (id != other.id)
+			  return false;
+		  return true;
+	  }
+	  
+	  @Override
+	  public int hashCode() {
+		  final int prime = 31;
+		  int result = 1;
+		  result = prime * result + (int) (id ^ (id >>> 32));
+		  return result;
 	  }
 }

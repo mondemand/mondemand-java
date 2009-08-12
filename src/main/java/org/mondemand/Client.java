@@ -215,7 +215,7 @@ public class Client {
      * Adds a new transport to this client.
      * @param transport the transport object to add
      */
-    public void addTransport(Transport transport) {
+    public synchronized void addTransport(Transport transport) {
     	if(this.transports == null) {
     		this.transports = new Vector<Transport>();
     	}
@@ -715,13 +715,15 @@ public class Client {
     			if(this.messages.containsKey(key)) {
     				// repeated message, increment the repeat counter
     				LogMessage msg = (LogMessage) this.messages.get(key);
-    				msg.setRepeat(msg.getRepeat() + 1);
-    				if(msg.getRepeat() % 999 == 0) {
-    					flushLogs();
-    					return;
-    				}
+    				if(msg != null) {
+    					msg.setRepeat(msg.getRepeat() + 1);
+    					if(msg.getRepeat() % 999 == 0) {
+    						flushLogs();
+    						return;
+    					}
     				
-    				this.messages.put(key, msg);
+    					this.messages.put(key, msg);
+    				}
     			} else {
     				// new message
     				LogMessage msg = new LogMessage();

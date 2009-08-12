@@ -17,51 +17,51 @@ public class Level implements Serializable {
 	/**
 	 * all off
 	 */
-	public final static short OFF = -1;
+	public final static int OFF = -1;
 	
 	/**
 	 * Default emergency priority value for the Logger
 	 */
-	public final static short EMERG = 0;
+	public final static int EMERG = 0;
 
 	/**
 	 * Default alert priority value for the Logger
 	 */
-	public final static short ALERT = 1;
+	public final static int ALERT = 1;
 
 	/**
 	 * Default critical priority value for the Logger
 	 */
-	public final static short CRIT = 2;
+	public final static int CRIT = 2;
 
 	/**
 	 * Default error priority value for the Logger
 	 */
-	public final static short ERROR = 3;
+	public final static int ERROR = 3;
 
 	/**
 	 * Default warning priority value for the Logger
 	 */
-	public final static short WARNING = 4;
+	public final static int WARNING = 4;
 
 	/**
 	 * Default notice priority value for the Logger
 	 */
-	public final static short NOTICE = 5;
+	public final static int NOTICE = 5;
 
 	/**
 	 * Default info priority value for the Logger
 	 */
-	public final static short INFO = 6;
+	public final static int INFO = 6;
 
 	/**
 	 * Default debug priority value for the Logger
 	 */
-	public final static short DEBUG = 7;
+	public final static int DEBUG = 7;
 
 	/**
 	 * Default value to send all messages for the Logger
 	 */
-	public final static short ALL = 8;	
+	public final static int ALL = 8;	
 	
 }
