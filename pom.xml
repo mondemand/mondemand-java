@@ -8,7 +8,7 @@
 	<artifactId>mondemand-java</artifactId>
 	<packaging>jar</packaging>
 	<name>mondemand-java</name>
-	<version>0.0.2</version>
+	<version>0.0.3</version>
 	
 	<!-- module dependencies -->
 	<dependencies>
@@ -23,15 +23,15 @@
 			<groupId>junit</groupId>
 			<artifactId>junit</artifactId>
 			<type>jar</type>
-			<version>4.0</version>
+			<version>4.5</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.lwes</groupId>
 			<artifactId>lwes-java</artifactId>
 			<type>jar</type>
-			<version>0.0.3</version>
-			<scope>runtime</scope>
+			<version>0.2.0</version>
+			<scope>compile</scope>
 		</dependency>
 	</dependencies>
 	
@@ -41,9 +41,10 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
+                <version>2.0.2</version>
 				<configuration>
-					<source>1.5</source>
-					<target>1.5</target>
+					<source>1.6</source>
+					<target>1.6</target>
 				</configuration>
 			</plugin>
 		</plugins>

@@ -284,7 +284,7 @@ public class ClientTest {
 		Transport t2 = new LWESTransport(InetAddress.getLocalHost(), -1, null);
 		client.addTransport(t2);
 		
-		new LWESTransport(InetAddress.getByName("224.1.1.111"), 80, null, -100);
+		new LWESTransport(InetAddress.getByName("224.1.1.111"), 80, null, 100);
 		
 		for(int i=0; i<1000; ++i) {
 			client.log("testLwesTransport", 123, Level.CRIT, null, "Test Message", null);

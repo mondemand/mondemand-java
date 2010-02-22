@@ -122,7 +122,7 @@ public class LWESTransport implements Transport {
 			// for each statistic, set the values
 			for(int i=0; i<messages.length; ++i) {
 				statsMsg.setString("k" + i, messages[i].getKey());
-				statsMsg.setInt64("l" + i, messages[i].getCounter());
+				statsMsg.setInt64("v" + i, messages[i].getCounter());
 			}
 			
 			// set the contextual data in the event
