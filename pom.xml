@@ -9,6 +9,15 @@
 	<packaging>jar</packaging>
 	<name>mondemand-java</name>
 	<version>0.0.3</version>
+
+  <!-- publish to the maven repo hosted in the web area -->
+  <distributionManagement>
+    <repository>
+      <id>sourceforge.mondemand</id>
+      <name>SourceForge</name>
+      <url>sftp://web.sourceforge.net/home/groups/m/mo/mondemand/htdocs/m2/</url> 
+    </repository>
+  </distributionManagement>
 	
 	<!-- module dependencies -->
 	<dependencies>
@@ -16,7 +25,7 @@
 			<groupId>log4j</groupId>
 			<artifactId>log4j</artifactId>
 			<type>jar</type>
-			<version>1.2.15</version>
+			<version>1.2.16</version>
 			<scope>compile</scope>
 		</dependency>
 		<dependency>
@@ -34,6 +43,18 @@
 			<scope>compile</scope>
 		</dependency>
 	</dependencies>
+
+  <repositories>
+    <repository>
+      <id>mondemand</id>
+      <name>Mondemand Maven Repository</name>
+      <layout>default</layout>
+      <url>http://www.mondemand.org/m2/</url>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
 	
 	<!-- build phase -->
 	<build>
