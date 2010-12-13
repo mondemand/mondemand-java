@@ -2,13 +2,12 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" 
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-	
-	<modelVersion>4.0.0</modelVersion>
-	<groupId>org.mondemand</groupId>
-	<artifactId>mondemand-java</artifactId>
-	<packaging>jar</packaging>
-	<name>mondemand-java</name>
-	<version>0.0.3</version>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.mondemand</groupId>
+  <artifactId>mondemand-java</artifactId>
+  <packaging>jar</packaging>
+  <name>mondemand-java</name>
+  <version>0.0.4</version>
 
   <!-- publish to the maven repo hosted in the web area -->
   <distributionManagement>
@@ -18,31 +17,31 @@
       <url>sftp://web.sourceforge.net/home/groups/m/mo/mondemand/htdocs/m2/</url> 
     </repository>
   </distributionManagement>
-	
-	<!-- module dependencies -->
-	<dependencies>
-		<dependency>
-			<groupId>log4j</groupId>
-			<artifactId>log4j</artifactId>
-			<type>jar</type>
-			<version>1.2.16</version>
-			<scope>compile</scope>
-		</dependency>
-		<dependency>
-			<groupId>junit</groupId>
-			<artifactId>junit</artifactId>
-			<type>jar</type>
-			<version>4.5</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.lwes</groupId>
-			<artifactId>lwes-java</artifactId>
-			<type>jar</type>
-			<version>0.2.0</version>
-			<scope>compile</scope>
-		</dependency>
-	</dependencies>
+
+  <!-- module dependencies -->
+  <dependencies>
+    <dependency>
+      <groupId>log4j</groupId>
+      <artifactId>log4j</artifactId>
+      <type>jar</type>
+      <version>1.2.16</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <type>jar</type>
+      <version>4.5</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.lwes</groupId>
+      <artifactId>lwes-java</artifactId>
+      <type>jar</type>
+      <version>0.2.5</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
 
   <repositories>
     <repository>
@@ -55,19 +54,19 @@
       </snapshots>
     </repository>
   </repositories>
-	
-	<!-- build phase -->
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-compiler-plugin</artifactId>
-                <version>2.0.2</version>
-				<configuration>
-					<source>1.6</source>
-					<target>1.6</target>
-				</configuration>
-			</plugin>
-		</plugins>
-	</build>
+
+  <!-- build phase -->
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>2.0.2</version>
+        <configuration>
+          <source>1.6</source>
+          <target>1.6</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 </project>
