@@ -21,27 +21,28 @@ package org.mondemand;
  */
 public class DefaultErrorHandler implements ErrorHandler {
 
-	/**
-	 * Writes MonDemand errors to standard error.
-	 */
-	public void handleError(String error) {
-		if(error != null) {
-			System.err.println("MonDemand error: " + error);
-		}
+  /**
+   * Writes MonDemand errors to standard error.
+   */
+  public void handleError(String error) {
+    if(error != null) {
+      System.err.println("MonDemand error: " + error);
+    }
 
-	}
+  }
 
-	/**
-	 * Writes MonDemand errors that have an associated exception to standard error.
-	 */
-	public void handleError(String error, Exception e) {
-		if(error != null) {
-			System.err.println("MonDemand error: " + error);
-		}
-		if(e != null ) {
-			e.printStackTrace(System.err);
-		}
+  /**
+   * Writes MonDemand errors that have an associated exception to
+   * standard error.
+   */
+  public void handleError(String error, Exception e) {
+    if(error != null) {
+      System.err.println("MonDemand error: " + error);
+    }
+    if(e != null ) {
+      e.printStackTrace(System.err);
+    }
 
-	}
+  }
 
 }

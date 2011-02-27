@@ -13,40 +13,56 @@
 package org.mondemand;
 
 import java.io.Serializable;
+import org.mondemand.StatType;
 
 public class StatsMessage implements Serializable {
-	private String key = null;
-	private long counter = 0;
-	
-	/**
-	 * @return the key
-	 */
-	public String getKey() {
-		return key;
-	}
-	
-	/**
-	 * @param key the key to set
-	 */
-	public void setKey(String key) {
-		this.key = key;
-	}
-	
-	/**
-	 * @return the counter
-	 */
-	public long getCounter() {
-		return counter;
-	}
-	
-	/**
-	 * @param counter the counter to set
-	 */
-	public void setCounter(long counter) {
-		this.counter = counter;
-	}
-	
-	public String toString() {
-		return key + ": counter=" + counter;
-	}
+  private String key = null;
+  private StatType type = StatType.Unknown;
+  private long counter = 0;
+
+  /**
+   * @return the key
+   */
+  public String getKey() {
+    return key;
+  }
+
+  /**
+   * @param key the key to set
+   */
+  public void setKey(String key) {
+    this.key = key;
+  }
+
+  /**
+   * @return the counter
+   */
+  public long getCounter() {
+    return counter;
+  }
+
+  /**
+   * @param counter the counter to set
+   */
+  public void setCounter(long counter) {
+    this.counter = counter;
+  }
+
+  /**
+   * @return the type
+   */
+  public StatType getType() {
+    return type;
+  }
+
+  /**
+   * @param type set the type of the stat
+   */
+  public void setType (StatType type) {
+    this.type = type;
+  }
+
+  public String toString() {
+    return type + " : " + key + " : " + counter;
+  }
 }
