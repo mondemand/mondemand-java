@@ -45,4 +45,12 @@ public class Context implements Serializable {
   public void setValue(String value) {
     this.value = value;
   }
+
+  public Context() {
+  }
+
+  public Context(String k, String v) {
+    key = k;
+    value = v;
+  }
 }

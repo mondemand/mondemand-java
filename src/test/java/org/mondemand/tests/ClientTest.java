@@ -40,6 +40,7 @@ import java.io.ByteArrayOutputStream;
 import java.net.InetAddress;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Map;
 import java.lang.reflect.Field;
 
 public class ClientTest {
@@ -346,6 +347,23 @@ public class ClientTest {
     }
 
   @Test
+    public void testTraceMessages () throws Exception {
+      Client c = new Client ("tracer");
+      InetAddress address = InetAddress.getLocalHost();
+      Transport t = new LWESTransport(address, 9292, null);
+      c.addTransport(t);
+      Map<String,String> myContext = new HashMap<String,String>();
+      myContext.put("apple","cat");
+      myContext.put("dog","5");
+      c.traceMessage ("trace_id_1","owner_1", myContext);
+      myContext.put("mondemand.trace_id", "trace_id_2");
+      c.traceMessage (myContext);
+      myContext.put("mondemand.owner", "owner_2");
+      c.traceMessage (myContext);
+      t.shutdown();
+    }
+
+  @Test
     public void testTransportShutdown() {
       transport.shutdown();
     }
@@ -515,6 +533,15 @@ public class ClientTest {
       }
     }
 
+    public void sendTrace (String programId,
+                           String traceId,
+                           String owner,
+                           Context[] contexts)
+      throws TransportException
+    {
+      /* FIXME: do something here? */
+    }
+
     public void shutdown() {
 
     }
@@ -532,6 +559,15 @@ public class ClientTest {
 
     public void sendStats (String programId,
                            StatsMessage[] messages,
+                           Context[] contexts)
+      throws TransportException
+    {
+      throw new TransportException("BogusTransport");
+    }
+
+    public void sendTrace (String programId,
+                           String traceId,
+                           String owner,
                            Context[] contexts)
       throws TransportException
     {

@@ -1,5 +1,8 @@
 This is the Java API for MonDemand.
 
+Version 3.0.0
+  * Added Trace messages
+
 Version 2.0.0
   * Fix trace ids not being sent in log events
   * add counter/gauge field to stats events

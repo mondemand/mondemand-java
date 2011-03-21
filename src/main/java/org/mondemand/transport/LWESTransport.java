@@ -34,8 +34,9 @@ public class LWESTransport
   /********************
    * Constants        *
    ********************/
-  private static final String LOG_EVENT = "MonDemand::LogMsg";
+  private static final String LOG_EVENT   = "MonDemand::LogMsg";
   private static final String STATS_EVENT = "MonDemand::StatsMsg";
+  private static final String TRACE_EVENT = "MonDemand::TraceMsg";
 
   /***********************
    * Instance attributes *
@@ -185,6 +186,33 @@ public class LWESTransport
       throw new TransportException("Error sending log event", e);
     }
   }
+
+  private static final String PROG_ID_KEY  = "mondemand.prog_id";
+  private static final String SRC_HOST_KEY = "mondemand.src_host";
+
+  public void sendTrace (String programId,
+                         Context[] contexts)
+    throws TransportException
+  {
+    if (contexts == null || emitter == null)
+      return;
+
+    try {
+      Event traceMsg = emitter.createEvent(TRACE_EVENT, false);
+      traceMsg.setString(PROG_ID_KEY, programId);
+      String hostName = InetAddress.getLocalHost ().getHostName ();
+      traceMsg.setString(SRC_HOST_KEY, hostName);
+
+      for(int i=0; i<contexts.length; ++i) {
+          traceMsg.setString(contexts[i].getKey(), contexts[i].getValue());
+      }
+      // emit the event
+      emitter.emit(traceMsg);
+    } catch(Exception e) {
+      throw new TransportException("Error sending log event", e);
+    }
+  }
+
 
   public void shutdown()
     throws TransportException

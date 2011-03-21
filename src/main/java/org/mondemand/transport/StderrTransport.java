@@ -62,6 +62,19 @@ public class StderrTransport implements Transport {
     }
   }
 
+  public void sendTrace (String programId,
+                         Context[] contexts)
+  {
+    try {
+      System.err.println ("["+programId+"]");
+      for(int i=0; i<contexts.length; ++i) {
+        System.err.println (contexts[i].getKey() + " = " + contexts[i].getValue());
+      }
+    } catch(Exception e) {
+      // we can't write to stderr, so just give up
+    }
+  }
+
   public void shutdown() {
     // do nothing
   }

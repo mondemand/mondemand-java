@@ -21,6 +21,9 @@ public interface Transport {
                          StatsMessage[] messages,
                          Context[] contexts)
     throws TransportException;
+  public void sendTrace (String programId,
+                         Context[] contexts)
+    throws TransportException;
   public void shutdown()
     throws TransportException;
 }

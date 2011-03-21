@@ -12,6 +12,8 @@
 
 package org.mondemand;
 
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Enumeration;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,6 +33,8 @@ public class Client {
   private final static String FILE_LINE_DELIMITER = ":";
   private final static int CALLER_DEPTH = 3;
   private final static int MAX_MESSAGES = 10;
+  private static final String TRACE_KEY    = "mondemand.trace_id";
+  private static final String OWNER_KEY    = "mondemand.owner";
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -52,7 +56,7 @@ public class Client {
    * The constructor creates a Client object that is ready to use.
    * @param programId a string identifying the program that is calling MonDemand
    */
-  public Client(String programId) {
+  public Client (String programId) {
     /* set the default error handler */
     this.errorHandler = new DefaultErrorHandler();
 
@@ -61,7 +65,7 @@ public class Client {
       this.programId = ClassUtils.getMainClass();
     } else {
       this.programId = programId;
-    }		
+    }
 
     /* setup internal data structures */
     contexts = new ConcurrentHashMap<String,Context>();
@@ -699,9 +703,52 @@ public class Client {
    * @param message the message
    * @param args optional arguments
    */
-  public void log(String name, int line, int level, 
+  public void log(String name, int line, int level,
       TraceId traceId, String message, Object[] args) {
     logReal(name, line, level, traceId, message, args);
+  }
+
+  public void traceMessage (Map<String, String> context) {
+    if (context.containsKey (TRACE_KEY)
+        && context.containsKey (OWNER_KEY))
+      {
+        traceMessage (context.get (TRACE_KEY),
+                      context.get (OWNER_KEY),
+                      context);
+      }
+  }
+
+
+  public void traceMessage (String traceId, String owner,
+                            Map<String, String> context) {
+    try {
+      /* FIXME: I'm sure there's a better way to do this but I am not the best
+       * java programmer.
+       */
+      ConcurrentHashMap<String,Context> tmp =
+        new ConcurrentHashMap<String,Context>();
+      for (Entry<String,String> entry : context.entrySet())
+        {
+          tmp.put(entry.getKey(),
+                  new Context(entry.getKey(), entry.getValue()));
+        }
+      /* override anything set in the context with the arguments */
+      tmp.put(traceId, new Context(TRACE_KEY, traceId));
+      tmp.put(owner, new Context(OWNER_KEY, owner));
+
+      Context[] contexts = tmp.values().toArray(new Context[0]);
+
+      for(int i=0; i<this.transports.size(); ++i) {
+        Transport t = transports.elementAt(i);
+        try {
+          t.sendTrace(programId, contexts);
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendTrace()", te);
+        }
+      }
+    } catch(Exception e) {
+      errorHandler.handleError("Error calling Client.traceMessage()", e);
+    }
   }
 
   /********************************
