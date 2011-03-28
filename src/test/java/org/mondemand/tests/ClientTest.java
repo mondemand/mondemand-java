@@ -355,11 +355,16 @@ public class ClientTest {
       Map<String,String> myContext = new HashMap<String,String>();
       myContext.put("apple","cat");
       myContext.put("dog","5");
-      c.traceMessage ("trace_id_1","owner_1", myContext);
+      assertEquals (c.traceMessage ("owner_1", "trace_id_1",
+                                    "message 1", myContext), true);
+
+      /* context only has trace, so traceMessage will fail */
       myContext.put("mondemand.trace_id", "trace_id_2");
-      c.traceMessage (myContext);
+      assertEquals (c.traceMessage ("message 2", myContext), false);
+
+      /* now it has an owner and a trace so will work */
       myContext.put("mondemand.owner", "owner_2");
-      c.traceMessage (myContext);
+      assertEquals (c.traceMessage ("message 3", myContext), true);
       t.shutdown();
     }
 
@@ -534,8 +539,6 @@ public class ClientTest {
     }
 
     public void sendTrace (String programId,
-                           String traceId,
-                           String owner,
                            Context[] contexts)
       throws TransportException
     {
@@ -566,8 +569,6 @@ public class ClientTest {
     }
 
     public void sendTrace (String programId,
-                           String traceId,
-                           String owner,
                            Context[] contexts)
       throws TransportException
     {

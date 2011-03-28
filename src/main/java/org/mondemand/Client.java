@@ -35,6 +35,7 @@ public class Client {
   private final static int MAX_MESSAGES = 10;
   private static final String TRACE_KEY    = "mondemand.trace_id";
   private static final String OWNER_KEY    = "mondemand.owner";
+  private static final String MESSAGE_KEY  = "mondemand.message";
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -708,19 +709,25 @@ public class Client {
     logReal(name, line, level, traceId, message, args);
   }
 
-  public void traceMessage (Map<String, String> context) {
+  public boolean traceMessage (String message,
+                            Map<String, String> context) {
     if (context.containsKey (TRACE_KEY)
         && context.containsKey (OWNER_KEY))
       {
-        traceMessage (context.get (TRACE_KEY),
-                      context.get (OWNER_KEY),
-                      context);
+        return traceMessage (context.get (OWNER_KEY),
+                             context.get (TRACE_KEY),
+                             message,
+                             context);
+      }
+    else
+      {
+        return false;
       }
   }
 
-
-  public void traceMessage (String traceId, String owner,
-                            Map<String, String> context) {
+  public boolean traceMessage (String owner, String traceId, String message,
+                               Map<String, String> context) {
+    boolean ret = false;
     try {
       /* FIXME: I'm sure there's a better way to do this but I am not the best
        * java programmer.
@@ -733,22 +740,29 @@ public class Client {
                   new Context(entry.getKey(), entry.getValue()));
         }
       /* override anything set in the context with the arguments */
-      tmp.put(traceId, new Context(TRACE_KEY, traceId));
       tmp.put(owner, new Context(OWNER_KEY, owner));
+      tmp.put(traceId, new Context(TRACE_KEY, traceId));
+      tmp.put(message, new Context(MESSAGE_KEY, message));
 
       Context[] contexts = tmp.values().toArray(new Context[0]);
 
       for(int i=0; i<this.transports.size(); ++i) {
         Transport t = transports.elementAt(i);
         try {
+          System.out.println("call with "+message);
           t.sendTrace(programId, contexts);
         } catch(TransportException te) {
+          System.out.println("Error calling Transport.sendTrace()");
           errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
       }
+      ret = true;
     } catch(Exception e) {
+      System.out.println("Error calling Client.traceMessage()");
       errorHandler.handleError("Error calling Client.traceMessage()", e);
     }
+
+    return ret;
   }
 
   /********************************
