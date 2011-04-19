@@ -749,16 +749,13 @@ public class Client {
       for(int i=0; i<this.transports.size(); ++i) {
         Transport t = transports.elementAt(i);
         try {
-          System.out.println("call with "+message);
           t.sendTrace(programId, contexts);
         } catch(TransportException te) {
-          System.out.println("Error calling Transport.sendTrace()");
           errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
       }
       ret = true;
     } catch(Exception e) {
-      System.out.println("Error calling Client.traceMessage()");
       errorHandler.handleError("Error calling Client.traceMessage()", e);
     }
 
