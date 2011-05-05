@@ -105,7 +105,8 @@ public class LWESTransport
                         Context[] contexts)
     throws TransportException
   {
-    if(messages == null || contexts == null || emitter == null) return;
+    if (messages == null || messages.length == 0
+        || contexts == null || emitter == null) return;
 
     try {
       // create the event and set parameters
@@ -155,7 +156,8 @@ public class LWESTransport
                          Context[] contexts)
     throws TransportException
   {
-    if (messages == null || contexts == null || emitter == null)
+    if (messages == null || messages.length == 0
+        || contexts == null || emitter == null)
       return;
 
     try {

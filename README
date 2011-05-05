@@ -1,5 +1,8 @@
 This is the Java API for MonDemand.
 
+Version 4.0.2
+  * There was an empty log message being sent when you called flush()
+
 Version 4.0.1
   * Left in some debug output
 
