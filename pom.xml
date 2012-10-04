@@ -1,22 +1,20 @@
 <?xml version="1.0"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" 
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.mondemand</groupId>
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
   <name>mondemand-java</name>
-  <version>5.0.0</version>
+  <version>5.0.0-SNAPSHOT</version>
 
-  <!-- publish to the maven repo hosted in the web area -->
-  <distributionManagement>
-    <repository>
-      <id>sourceforge.mondemand</id>
-      <name>SourceForge</name>
-      <url>sftp://web.sourceforge.net/home/groups/m/mo/mondemand/htdocs/m2/</url> 
-    </repository>
-  </distributionManagement>
+  <scm>
+    <connection>scm:git:git@github.com:mondemand/mondemand-java.git</connection>
+    <developerConnection>scm:git:git@github.com:mondemand/mondemand-java.git</developerConnection>
+    <url>https://github.com/mondemand/mondemand-java</url>
+  </scm>
 
   <!-- module dependencies -->
   <dependencies>
@@ -38,11 +36,12 @@
       <groupId>org.lwes</groupId>
       <artifactId>lwes-java</artifactId>
       <type>jar</type>
-      <version>1.1.1</version>
+      <version>1.2.0</version>
       <scope>compile</scope>
     </dependency>
   </dependencies>
 
+  <!--
   <repositories>
     <repository>
       <id>mondemand</id>
@@ -54,10 +53,16 @@
       </snapshots>
     </repository>
   </repositories>
+  -->
 
   <!-- build phase -->
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-release-plugin</artifactId>
+        <version>2.0</version>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
