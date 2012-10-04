@@ -6,7 +6,7 @@
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
   <name>mondemand-java</name>
-  <version>5.0.0</version>
+  <version>5.0.1-SNAPSHOT</version>
 
   <scm>
     <connection>scm:git:git@github.com:mondemand/mondemand-java.git</connection>
