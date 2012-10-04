@@ -1,0 +1,16 @@
+Version 4.0.2
+  * There was an empty log message being sent when you called flush()
+
+Version 4.0.1
+  * Left in some debug output
+
+Version 4.0.0
+  * More trace messages
+
+Version 3.0.0
+  * Added Trace messages
+
+Version 2.0.0
+  * Fix trace ids not being sent in log events
+  * add counter/gauge field to stats events
+
