@@ -1,17 +1,12 @@
 This is the Java API for MonDemand.
 
-Version 4.0.2
-  * There was an empty log message being sent when you called flush()
+Build
+-----
 
-Version 4.0.1
-  * Left in some debug output
+    % mvn package
 
-Version 4.0.0
-  * More trace messages
+Release
+-------
 
-Version 3.0.0
-  * Added Trace messages
+    % mvn --batch-mode release:prepare release:perform
 
-Version 2.0.0
-  * Fix trace ids not being sent in log events
-  * add counter/gauge field to stats events
