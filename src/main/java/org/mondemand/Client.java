@@ -12,9 +12,9 @@
 
 package org.mondemand;
 
+import java.util.Enumeration;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Enumeration;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -50,7 +50,7 @@ public class Client {
   private Vector<Transport> transports = null;
 
   /********************************
-   * CONSTRUCTORS AND DESTRUCTORS *   
+   * CONSTRUCTORS AND DESTRUCTORS *
    ********************************/
 
   /**
@@ -76,8 +76,19 @@ public class Client {
   }
 
   /**
+   * The constructor creates a Client object that is ready to use.
+   * @param programId a string identifying the program that is calling Mondemand
+   * @param host a string identifying the host (i.e. InetAddress.getLocalHost().getHostName()) where the program is running.
+   */
+  public Client (String programId, String host) {
+    this(programId);
+    addContext("host", host);
+  }
+
+  /**
    * Called when the client is destroyed.  Ensures that everything is cleaned up properly.
    */
+  @Override
   public void finalize() {
     // try to flush all logs and stats
     flushLogs();
@@ -99,7 +110,7 @@ public class Client {
   }
 
   /********************************
-   * ACCESSORS AND MUTATORS       *   
+   * ACCESSORS AND MUTATORS       *
    ********************************/
 
   /**
@@ -162,7 +173,7 @@ public class Client {
   }
 
   /********************************
-   * PUBLIC API METHODS           *   
+   * PUBLIC API METHODS           *
    ********************************/
 
   /**
@@ -208,7 +219,7 @@ public class Client {
 
   /**
    * Retrieves an enumeration of all the contextual data keys
-   * 
+   *
    * @return an enumeration of all keys
    */
   public Enumeration<String> getContextKeys() {
@@ -244,7 +255,7 @@ public class Client {
 
   /**
    * A check for the log level that is set.
-   * 
+   *
    * @param level the priority level to check
    * @param traceId the TraceId to check for
    * @return true if this level is enabled, false otherwise
@@ -253,7 +264,7 @@ public class Client {
     if (traceId == null) {
       return level < this.noSendLevel;
     } else {
-      return ((traceId.compareTo(TraceId.NULL_TRACE_ID) != 0) || 
+      return ((traceId.compareTo(TraceId.NULL_TRACE_ID) != 0) ||
           (level < this.noSendLevel));
     }
   }
@@ -276,7 +287,7 @@ public class Client {
   }
 
   /**
-   * Flushes statistics to the transports, but allows one to specify whether or not to reset the 
+   * Flushes statistics to the transports, but allows one to specify whether or not to reset the
    * running statistics.
    */
   public void flushStats(boolean reset) {
@@ -763,7 +774,7 @@ public class Client {
   }
 
   /********************************
-   * PRIVATE API METHODS          *   
+   * PRIVATE API METHODS          *
    ********************************/
 
   private void logReal(String name, int line, int level,
@@ -774,7 +785,7 @@ public class Client {
 
     if(message == null) return;
     if(level < Level.OFF || level > Level.ALL) {
-      errorHandler.handleError("Client.logReal() called by " + 
+      errorHandler.handleError("Client.logReal() called by " +
           name + ":" + line + " with invalid log level: " + Integer.toString(level));
     }
 
