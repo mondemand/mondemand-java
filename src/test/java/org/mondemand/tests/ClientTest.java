@@ -11,37 +11,41 @@
  *======================================================================*/
 package org.mondemand.tests;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.lang.reflect.Field;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.log4j.Logger;
+import org.apache.log4j.spi.LocationInfo;
+import org.apache.log4j.spi.LoggingEvent;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 import org.mondemand.Client;
 import org.mondemand.Context;
 import org.mondemand.ErrorHandler;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
-import org.mondemand.StatsMessage;
 import org.mondemand.StatType;
+import org.mondemand.StatsMessage;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
 import org.mondemand.log4j.MonDemandAppender;
-import org.mondemand.transport.StderrTransport;
 import org.mondemand.transport.LWESTransport;
+import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
-
-import org.apache.log4j.Logger;
-import org.apache.log4j.spi.LocationInfo;
-import org.apache.log4j.spi.LoggingEvent;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
-
-import java.io.PrintStream;
-import java.io.ByteArrayOutputStream;
-import java.net.InetAddress;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
-import java.lang.reflect.Field;
 
 public class ClientTest {
   private static Client client = new Client("ClientTest");
@@ -88,6 +92,13 @@ public class ClientTest {
     public void testClientCreate() {
       Client c = new Client(null);
       assertNotNull(c);
+    }
+
+  @Test
+    public void testClientCreateWithHostname() throws UnknownHostException {
+      String host = InetAddress.getLocalHost().getHostName();
+      Client c = new Client("my-test", host);
+      assertEquals(host, c.getContext("host"));
     }
 
   @Test
@@ -461,7 +472,7 @@ public class ClientTest {
       LoggingEvent event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.ERROR,
           "test", "test", null,
           "abc", new LocationInfo("ClientTest", "ClientTest", "testAppender", "398"), properties);
-      appender.doAppend(event);	
+      appender.doAppend(event);
 
       event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.WARN,
           "test", "test", null,
@@ -515,6 +526,7 @@ public class ClientTest {
     public StatsMessage[] stats = new StatsMessage[0];
     public TraceId traceId = null;
 
+    @Override
     public void sendLogs (String programId,
                           LogMessage[] messages,
                           Context[] contexts)
@@ -528,6 +540,7 @@ public class ClientTest {
       }
     }
 
+    @Override
     public void sendStats (String programId,
                            StatsMessage[] messages,
                            Context[] contexts)
@@ -538,6 +551,7 @@ public class ClientTest {
       }
     }
 
+    @Override
     public void sendTrace (String programId,
                            Context[] contexts)
       throws TransportException
@@ -545,6 +559,7 @@ public class ClientTest {
       /* FIXME: do something here? */
     }
 
+    @Override
     public void shutdown() {
 
     }
@@ -552,6 +567,7 @@ public class ClientTest {
 
   public static class BogusTransport implements Transport
   {
+    @Override
     public void sendLogs (String programId,
                           LogMessage[] messages,
                           Context[] contexts)
@@ -560,6 +576,7 @@ public class ClientTest {
       throw new TransportException("BogusTransport");
     }
 
+    @Override
     public void sendStats (String programId,
                            StatsMessage[] messages,
                            Context[] contexts)
@@ -568,6 +585,7 @@ public class ClientTest {
       throw new TransportException("BogusTransport");
     }
 
+    @Override
     public void sendTrace (String programId,
                            Context[] contexts)
       throws TransportException
@@ -575,6 +593,7 @@ public class ClientTest {
       throw new TransportException("BogusTransport");
     }
 
+    @Override
     public void shutdown() throws TransportException
     {
       throw new TransportException("BogusTransport");
@@ -583,6 +602,7 @@ public class ClientTest {
 
   public static class TestErrorHandler implements ErrorHandler
   {
+    @Override
     public void handleError (String error)
     {
 
@@ -592,6 +612,7 @@ public class ClientTest {
      * Writes MonDemand errors that have an associated exception
      * to standard error.
      */
+    @Override
     public void handleError (String error, Exception e)
     {
     }
