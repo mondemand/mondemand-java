@@ -15,18 +15,26 @@ package org.mondemand.transport;
 import java.io.IOException;
 import java.net.InetAddress;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
+import org.apache.http.util.EntityUtils;
+import org.lwes.Event;
+import org.lwes.EventSystemException;
+import org.lwes.emitter.EventEmitter;
+import org.lwes.emitter.MulticastEventEmitter;
+import org.lwes.emitter.UnicastEventEmitter;
 import org.mondemand.Context;
 import org.mondemand.LogMessage;
 import org.mondemand.StatsMessage;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
-
-import org.lwes.Event;
-import org.lwes.EventSystemException;
-import org.lwes.emitter.EventEmitter;
-import org.lwes.emitter.MulticastEventEmitter;
-import org.lwes.emitter.UnicastEventEmitter;
 
 public class LWESTransport
   implements Transport
@@ -42,7 +50,10 @@ public class LWESTransport
    * Instance attributes *
    ***********************/
   private EventEmitter emitter = null;
-
+  private HttpClient httpClient = null;
+  private String tcpEndpoint = null;
+  private boolean tcpTransportAvailable = false;
+  
   /**
    * Creates an initializes a LWES transport.
    * @param address the address to send events to, can be a multicast
@@ -100,7 +111,27 @@ public class LWESTransport
     }
   }
 
-  public void sendLogs (String programId,
+  public LWESTransport (InetAddress address, int udpPort, int tcpPort, String endpoint,
+                        InetAddress networkInterface, int ttl)
+    throws TransportException
+  {
+      this (address, udpPort, networkInterface, ttl);
+      
+      this.tcpEndpoint = constructTcpUrl(address, tcpPort, endpoint);
+      PoolingHttpClientConnectionManager cm = 
+              new PoolingHttpClientConnectionManager();
+      this.httpClient = HttpClients.custom().setConnectionManager(cm).build();
+      this.tcpTransportAvailable = true;
+  }
+  
+  private String constructTcpUrl(InetAddress address, int tcpPort,
+            String endpoint) {
+      return new StringBuilder("http://").append(address.getHostAddress())
+             .append(":").append(tcpPort).append("/").append(endpoint)
+             .toString();
+  }
+
+public void sendLogs (String programId,
                         LogMessage[] messages,
                         Context[] contexts)
     throws TransportException
@@ -200,21 +231,42 @@ public class LWESTransport
       return;
 
     try {
+      boolean needTcpTransport = false;
       Event traceMsg = emitter.createEvent(TRACE_EVENT, false);
       traceMsg.setString(PROG_ID_KEY, programId);
       String hostName = InetAddress.getLocalHost ().getHostName ();
       traceMsg.setString(SRC_HOST_KEY, hostName);
 
       for(int i=0; i<contexts.length; ++i) {
-          traceMsg.setString(contexts[i].getKey(), contexts[i].getValue());
+          if(longString(contexts[i].getValue())){
+              traceMsg.setLongString(contexts[i].getKey(), contexts[i].getValue());
+              needTcpTransport = true;
+          }
+          else
+              traceMsg.setString(contexts[i].getKey(), contexts[i].getValue());
       }
       // emit the event
-      emitter.emit(traceMsg);
+      if (needTcpTransport && tcpTransportAvailable)
+          postViaHttp (traceMsg);
+      else
+          emitter.emit(traceMsg);
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
   }
 
+  private boolean longString(String str) {
+      return StringUtils.length(str) > 65535 ? true : false;
+  }
+  
+  private void postViaHttp(Event e) throws ClientProtocolException,
+          IOException {
+      byte[] bin = e.serialize();
+      HttpPost post = new HttpPost(tcpEndpoint);
+      post.setEntity(new ByteArrayEntity(bin));
+      HttpResponse response = httpClient.execute(post);
+      EntityUtils.consume(response.getEntity());
+  }
 
   public void shutdown()
     throws TransportException
@@ -225,4 +277,5 @@ public class LWESTransport
       throw new TransportException("Unable to shutdown emitter");
     }
   }
+  
 }
