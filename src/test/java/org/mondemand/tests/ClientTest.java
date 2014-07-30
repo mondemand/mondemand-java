@@ -18,13 +18,21 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
+import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LocationInfo;
@@ -32,6 +40,11 @@ import org.apache.log4j.spi.LoggingEvent;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.lwes.Event;
+import org.lwes.EventSystemException;
+import org.lwes.MapEvent;
+import org.lwes.emitter.MulticastEventEmitter;
+import org.lwes.emitter.UnicastEventEmitter;
 import org.mondemand.Client;
 import org.mondemand.Context;
 import org.mondemand.ErrorHandler;
@@ -39,6 +52,7 @@ import org.mondemand.Level;
 import org.mondemand.LogMessage;
 import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
+import org.mondemand.TimerStatTrackType;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
@@ -48,6 +62,44 @@ import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
 
 public class ClientTest {
+
+  // stub unitcast emitter for LwesTransport
+  class StubUnicastEventEmitter extends UnicastEventEmitter {
+
+    public Map<String, String> eventTypes = new HashMap<String, String>();
+    public Map<String, String> eventKeys = new HashMap<String, String>();
+    public Map<String, Long> eventValues = new HashMap<String, Long>();
+
+    /**
+     * during emit, all we do is to capture the type/key/values we put in the
+     * event to make sure the right key/values are put in the event, and nothing
+     * extra is there. it populates 3 maps with the types/keys/values.
+     *
+     * @param event - the lwes event to be inspected
+     */
+    @Override
+    public void emit(Event event) throws IOException, EventSystemException {
+      // go through the event and populate the maps with the entries in the event
+      // that start with "t", "k" or "v"
+      MapEvent me = (MapEvent)event;
+      for(String key : me.getEventAttributes()) {
+        if(key.startsWith("t")) {
+          eventTypes.put(key, me.getString(key));
+        } else if (key.startsWith("k")) {
+          eventKeys.put(key, me.getString(key));
+        } else if (key.startsWith("v")) {
+          eventValues.put(key, me.getInt64(key));
+        }
+      }
+    }
+
+    public void clearMaps() {
+      eventTypes.clear();
+      eventKeys.clear();
+      eventValues.clear();
+    }
+  }
+
   private static Client client = new Client("ClientTest");
   private static boolean transportIsSet = false;
   private static ClientTestTransport transport;
@@ -191,6 +243,291 @@ public class ClientTest {
 
       assertNull(client.getContext("key1"));
     }
+
+  /**
+   * create a client with a stub emitter, where we could inspect the entries
+   * in the lwes that would be emitted (in real world). Then for a set of random
+   * timer stat type (which covers all individual types and some combinations),
+   * generate a set of random numbers to be added to some random keys, and finally
+   * make sure that the desired stat types and their values are in the lwes
+   * event, and there is no extras in the event.
+   */
+  @Test
+  public void testTimerStats() throws Exception {
+    // create a client, with a transport's emitter that has the emit() stubbed out
+    Client client = new Client("ClientTestTimer");
+    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
+    emitter.setAccessible(true);
+    StubUnicastEventEmitter u = new StubUnicastEventEmitter();
+    u.setAddress(InetAddress.getLocalHost());
+    u.setPort(9292);
+    emitter.set(localLwesTransport, u);
+    Field timerStats = client.getClass().getDeclaredField("stats");
+    timerStats.setAccessible(true);
+
+    // timer stat types to check, contains all individual types and some combinations
+    int[] timerStatTypesToCheck = new int[]{
+        TimerStatTrackType.MIN.value,
+        TimerStatTrackType.MAX.value,
+        TimerStatTrackType.AVG.value,
+        TimerStatTrackType.MEDIAN.value,
+        TimerStatTrackType.PCTL_75.value,
+        TimerStatTrackType.PCTL_90.value,
+        TimerStatTrackType.PCTL_95.value,
+        TimerStatTrackType.PCTL_98.value,
+        TimerStatTrackType.PCTL_99.value,
+        // min & max
+        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value,
+        // average & 98 percentile
+        TimerStatTrackType.AVG.value | TimerStatTrackType.PCTL_98.value,
+        // 99 percentile & median
+        TimerStatTrackType.PCTL_99.value | TimerStatTrackType.MEDIAN.value,
+        // 95 percentile & 75 percentile
+        TimerStatTrackType.PCTL_95.value | TimerStatTrackType.PCTL_75.value,
+        // min & max & average & 90 percentile
+        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value |
+        TimerStatTrackType.AVG.value | TimerStatTrackType.PCTL_90.value,
+        // everything
+        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value |
+        TimerStatTrackType.AVG.value | TimerStatTrackType.MEDIAN.value |
+        TimerStatTrackType.PCTL_75.value | TimerStatTrackType.PCTL_90.value |
+        TimerStatTrackType.PCTL_95.value | TimerStatTrackType.PCTL_98.value |
+        TimerStatTrackType.PCTL_99.value,
+        // nothing
+        0,
+    };
+
+    for(int typeIdx=0; typeIdx<timerStatTypesToCheck.length; ++typeIdx) {
+      String key = "SomeKey_" + typeIdx;
+
+      // number of counter updates is random between MAX_SAMPLES_COUNT +/- 500 to make
+      // sure we cover cases that samples size is > and < MAX_SAMPLES_COUNT
+      int inputSize = (new Random()).nextInt(StatsMessage.MAX_SAMPLES_COUNT) + 500;
+
+      int total = 0;
+      for(int val=1; val <= inputSize; ++val) {
+        // value is random
+        int rndValue = (new Random()).nextInt(10000);
+        client.incrementTimer(key, rndValue, timerStatTypesToCheck[typeIdx]);
+        total += rndValue;
+      }
+
+      // get the samples for the stats for the given key
+      @SuppressWarnings("unchecked")
+      ConcurrentHashMap<String,StatsMessage> clientStats = (ConcurrentHashMap<String,StatsMessage>)timerStats.get(client);
+      ArrayList<Long> timerSamples = new ArrayList<Long>(clientStats.get(key).getSamples());
+      Collections.copy(timerSamples, clientStats.get(key).getSamples());
+      Collections.sort(timerSamples);
+
+      // trigger sendStats()
+      client.flushStats(true);
+
+      // first check type/key/value for total value, it should be the values for
+      // "t0/k0/v0" keys in the event, timer is a counter type.
+      assertEquals(u.eventTypes.get("t0"), "counter");
+      assertEquals(u.eventKeys.get("k0"), key);
+      assertEquals(u.eventValues.get("v0").longValue(), total);
+
+      // now make sure the extra stat types specified are also set correctly
+      int idx = 1;
+      for(TimerStatTrackType trackType: TimerStatTrackType.values()) {
+        // check if a specific trackType is set for the test case, if so
+        // check the emitter's maps
+        if( (timerStatTypesToCheck[typeIdx] & trackType.value) ==
+            trackType.value) {
+          // we check something like "t1=counter", "k1=min_SomeKey_0", "v1=10",
+          // "t2=counter", "k2=pctl_95_SomeKey_0", "v2=9500", all extra stats
+          // are gauges
+          assertEquals(u.eventTypes.get("t" + idx), "gauge");
+          assertEquals(u.eventKeys.get("k" + idx), trackType.keyPrefix + key);
+
+          if(trackType.value == TimerStatTrackType.AVG.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(),
+                (long)(total/inputSize));
+          } else {
+            assertEquals(u.eventValues.get("v" + idx).longValue(),
+                timerSamples.get( (int) ( (Math.min(inputSize, StatsMessage.MAX_SAMPLES_COUNT)-1) *
+                    trackType.indexInSamples)).intValue()  );
+          }
+          idx++;
+        }
+      }
+      // finally make sure no other key/value/types are set.
+      assertNull(u.eventTypes.get("t" + idx));
+      assertNull(u.eventKeys.get("t" + idx));
+      assertNull(u.eventValues.get("t" + idx));
+
+      // reset emitter
+      u.clearMaps();
+    }
+    client.finalize();
+  }
+
+  /**
+   * this will test the auto amit feature in the client
+   */
+  @Test
+  public void testAutoEmitter() throws Exception  {
+    // auto emit once every second
+    Client client = new Client("ClientTestTimer", true, true, 1);
+    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
+    emitter.setAccessible(true);
+    StubUnicastEventEmitter u = new StubUnicastEventEmitter();
+    u.setAddress(InetAddress.getLocalHost());
+    u.setPort(9292);
+    emitter.set(localLwesTransport, u);
+
+    // create a bunch of stats
+    int Count = 100;
+    for(int cnt=0; cnt<Count; ++cnt) {
+      client.increment("key_" + cnt, cnt);
+    }
+    // now sleep for 1.5 sec to make sure auto emit kicks in
+    Thread.sleep(1500);
+
+    // make sure Count number of type/key/values are emitted
+    assertEquals(u.eventTypes.size(), Count);
+    assertEquals(u.eventKeys.size(), Count);
+    assertEquals(u.eventValues.size(), Count);
+
+    // now check the type/key/values in the emitter object
+    for(int idx=0; idx<Count; ++idx) {
+      assertEquals(u.eventTypes.get("t" + idx), "counter");
+      assertNotNull(u.eventKeys.get("k" + idx));
+      // extract the idx from key
+      String key = u.eventKeys.get("k" + idx);
+      int val = Integer.parseInt(key.substring( "key_".length() ));
+      assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+    }
+    u.clearMaps();
+
+    // now sleep for 1.5 sec, there should not be anything emitted
+    Thread.sleep(1500);
+    assertEquals(u.eventTypes.size(), 0);
+    assertEquals(u.eventKeys.size(), 0);
+    assertEquals(u.eventValues.size(), 0);
+  }
+
+  /**
+   * this will test the addTransportsFromConfigFile method where we get the
+   * mondemand address from a file.
+   */
+  @Test
+  public void testClientAddTransportFromFile() {
+    Client client = new Client("ClientTestTimer");
+    File mondemandConfigFile = null;
+    FileOutputStream output = null;
+    try {
+      // non-exisitng config file
+      String nonExistingFileName = "non_existing_file" + (new Random()).nextInt();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(nonExistingFileName);
+        assertTrue(false);
+      } catch(Exception e) {}
+
+      // missing host
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_PORT=\"3344\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // missing port
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // bad port
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"\nMONDEMAND_PORT=\"dds\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // invalid host
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"450.1.2.3\"\nMONDEMAND_PORT=\"1234\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // everything valid
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      Vector<String> addresses = new Vector<String>();
+      addresses.add("127.0.0.1");
+      addresses.add("127.0.0.2");
+      addresses.add("224.1.2.200");
+      StringBuilder allAddresses = new StringBuilder();
+      for(String addr: addresses) {
+        allAddresses.append(", ").append(addr);
+      }
+      output.write( ("MONDEMAND_ADDR=\"" + allAddresses.toString().substring(1)
+          + "\"\nMONDEMAND_PORT=\"1234\"") .getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        // verify transports
+        Field transports = client.getClass().getDeclaredField("transports");
+        transports.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Vector<Transport> clientTransports = (Vector<Transport>)transports.get(client);
+        assertEquals(addresses.size(), clientTransports.size());
+        int cnt = 0;
+        for(Transport t: clientTransports) {
+          Field emitter = t.getClass().getDeclaredField("emitter");
+          emitter.setAccessible(true);
+          String address;
+          int port;
+          if (emitter.get(t) instanceof UnicastEventEmitter) {
+            address = ((UnicastEventEmitter)emitter.get(t)).getAddress().getHostAddress();
+            port = ((UnicastEventEmitter)emitter.get(t)).getPort();
+          } else {
+            address = ((MulticastEventEmitter)emitter.get(t)).getMulticastAddress().getHostAddress();
+            port = ((MulticastEventEmitter)emitter.get(t)).getMulticastPort();
+          }
+          assertEquals(address, addresses.get(cnt++));
+          assertEquals(port, 1234);
+        }
+      } catch(Exception e) {
+        // should not throw exception
+        assertTrue(false);
+      }
+      mondemandConfigFile.deleteOnExit();
+
+    } catch(Exception e) {
+      // should no see any exceptions
+      assertNotNull(null);
+    }
+  }
 
   @Test
     public void testEmptyFlush() {

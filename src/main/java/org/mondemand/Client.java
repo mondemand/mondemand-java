@@ -12,12 +12,17 @@
 
 package org.mondemand;
 
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.net.InetAddress;
 import java.util.Enumeration;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
 
 /**
@@ -36,6 +41,10 @@ public class Client {
   private static final String TRACE_KEY    = "mondemand.trace_id";
   private static final String OWNER_KEY    = "mondemand.owner";
   private static final String MESSAGE_KEY  = "mondemand.message";
+  private static final String CONFIG_FILE  = "/etc/mondemand/mondemand.conf";
+  private static final int    EMIT_INTERVAL = 60;   // 60 seconds
+  private static final boolean DEFAULT_AUTO_EMIT = false;   // auto emit disabled by default
+  private static final boolean DEFAULT_STAT_CLEAR = false;  // clear stats after flush by auto emit
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -48,16 +57,72 @@ public class Client {
   private ConcurrentHashMap<String,LogMessage> messages = null;
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private Vector<Transport> transports = null;
+  private ClientStatEmitter autoStatEmitter = null;
+  private Thread emitterThread = null;
 
   /********************************
    * CONSTRUCTORS AND DESTRUCTORS *
    ********************************/
 
   /**
-   * The constructor creates a Client object that is ready to use.
-   * @param programId a string identifying the program that is calling MonDemand
+   * object to auto emit the stats and logs
    */
-  public Client (String programId) {
+  public class ClientStatEmitter implements Runnable {
+    private final Client client;        // client to emit stats for
+    private final int intervalMS;       // emit interval in milli seconds
+    private final boolean clearStats;   // if the stats should be cleared after flush
+    private boolean stop = false;       // if the emitter should stop
+    /**
+     * constructor
+     * @param client - the client to emit stats for
+     * @param interval - emission interval in seconds
+     * @param clearStats - whether or not stats should be cleared after emit
+     */
+    ClientStatEmitter(Client client, int interval, boolean clearStats) {
+      this.client = client;
+      this.intervalMS = interval * 1000;
+      this.clearStats = clearStats;
+    }
+
+    /**
+     * make the auto-emit thread stop
+     */
+    public void stop() {
+      stop = true;
+    }
+
+    /**
+     * the run method for the emitter thread. it would sleep for interval and
+     * then emit the stats, and keep doing the same until it is interrupted to
+     * stop
+     */
+    public void run() {
+      while(!stop) {
+        try {
+          Thread.sleep(intervalMS);
+          client.flushStats(clearStats);
+          client.flushLogs();
+        } catch (InterruptedException e) {
+          // if we are interrupted, it will check for the stop flag
+        }
+      }
+      // final flush
+      client.flushStats(clearStats);
+      client.flushLogs();
+    }
+  }
+
+  /**
+   * The constructor creates a Client object that is ready to use.
+   *
+   * @param programId a string identifying the program that is calling MonDemand
+   * @param autoStatEmit specifies if auto stat emit is enabled
+   * @param clearStatAfterEmit specifies if stats should be cleared after each auto emit
+   * @param statEmitInterval - auto stat emit interval, ignored if auto
+   *        emission is disabled
+   */
+  public Client(String programId, boolean autoStatEmit, boolean clearStatAfterEmit,
+      int statEmitInterval) {
     /* set the default error handler */
     this.errorHandler = new DefaultErrorHandler();
 
@@ -73,6 +138,48 @@ public class Client {
     messages = new ConcurrentHashMap<String,LogMessage>();
     stats = new ConcurrentHashMap<String,StatsMessage>();
     transports = new Vector<Transport>();
+
+    // create and start the emitter thread
+    if(autoStatEmit) {
+      // make sure interval is greater than 1, otherwise use the default
+      statEmitInterval = statEmitInterval <= 0 ? EMIT_INTERVAL : statEmitInterval;
+      autoStatEmitter = new ClientStatEmitter(this, statEmitInterval, clearStatAfterEmit);
+      emitterThread = new Thread( autoStatEmitter );
+      emitterThread.start();
+    }
+  }
+
+  /**
+   * The constructor creates a Client object that is ready to use, uses default
+   * interval of 60 seconds for auto-emit if autoStatEmit is set.
+   *
+   * @param programId a string identifying the program that is calling MonDemand
+   * @param autoStatEmit specifies if auto stat emit is enabled
+   * @param clearStatAfterEmit specifies if stats should be cleared after each auto emit
+   */
+  public Client(String programId, boolean autoStatEmit, boolean clearStatAfterEmit) {
+    this(programId, autoStatEmit, clearStatAfterEmit, EMIT_INTERVAL);
+  }
+
+  /**
+   * The constructor creates a Client object that is ready to use, uses default
+   * interval of 60 seconds for auto-emit if autoStatEmit is set.
+   *
+   * @param programId a string identifying the program that is calling MonDemand
+   * @param autoStatEmit specifies if auto stat emit is enabled
+   */
+  public Client(String programId, boolean autoStatEmit) {
+    this(programId, autoStatEmit, DEFAULT_STAT_CLEAR, EMIT_INTERVAL);
+  }
+
+  /**
+   * The constructor creates a Client object that is ready to use. the auto-stat
+   * emit for the client created with this constructor is turned off.
+   *
+   * @param programId a string identifying the program that is calling MonDemand
+   */
+  public Client (String programId) {
+    this(programId, DEFAULT_AUTO_EMIT, DEFAULT_STAT_CLEAR, EMIT_INTERVAL);
   }
 
   /**
@@ -93,6 +200,19 @@ public class Client {
     // try to flush all logs and stats
     flushLogs();
     flushStats();
+
+    // stop the auto-emit thread
+    if(emitterThread != null) {
+      try {
+        autoStatEmitter.stop();
+        emitterThread.interrupt();
+        emitterThread.join();
+        autoStatEmitter = null;
+        emitterThread = null;
+      } catch (Exception e) {
+        // ignore the exception for join
+      }
+    }
 
     // clear all the data
     contexts.clear();
@@ -240,6 +360,71 @@ public class Client {
   }
 
   /**
+   * adds transports from the default configuration file
+   * at "/etc/mondemand/mondemand.conf"
+   * @throws Exception if default config file does not exist, or if there is a problem
+   *        reading the file, or if port cannot be converted to number, or if addresses
+   *        cannot be converted to valid hosts, or if a transport cannot be created
+   *        from addresses/port specified in the file.
+   */
+  public void addTransportsFromDefaultConfigFile()
+      throws Exception {
+    this.addTransportsFromConfigFile(CONFIG_FILE);
+  }
+
+  /**
+   * adds transports from a configuration file. the format of the file is:
+   * MONDEMAND_ADDR="ip_addr_1, ip_addr_2, ..."
+   * MONDEMAND_PORT="port"
+   *
+   * @param configFileName - configuration file name.
+   * @throws Exception if file does not exist, or if there is a problem reading
+   *        the file, or either port or address is missing, or if port cannot
+   *        be converted to number, or if addresses cannot be converted to valid
+   *        hosts, or if a transport cannot be created for addresses/port
+   *        specified in the file.
+   */
+  public void addTransportsFromConfigFile(String configFileName)
+      throws Exception {
+    final String ADDR = "MONDEMAND_ADDR";
+    final String PORT = "MONDEMAND_PORT";
+
+    String[] addresses = null;
+    Integer port = null;
+    Properties prop = new Properties();
+    InputStream input = null;
+    try {
+      // load a properties file
+      input = new FileInputStream(configFileName);
+      prop.load(input);
+      // make sure MONDEMAND_ADDR and MONDEMAND_PORT are both present
+      if(prop.getProperty(ADDR) == null || prop.getProperty(PORT) == null) {
+        throw new Exception( ADDR + " and " + PORT + " should be specified in the "
+            + "configuration file " + configFileName);
+      }
+      String adr = prop.getProperty(ADDR).replace("\"", "").replace(" ", "");
+      addresses = adr.split(",");
+      String p = prop.getProperty(PORT).replace("\"", "");
+      port = Integer.parseInt(p);
+      // add a new transport for each address/port
+      for(int cnt=0; cnt<addresses.length; cnt++) {
+        addTransport( new LWESTransport(InetAddress.getByName(addresses[cnt]),
+            port.intValue(), null) );
+      }
+    } catch (Exception ex) {
+      throw new Exception(ex);
+    } finally {
+      if (input != null) {
+        try {
+          input.close();
+        } catch (Exception e) {
+          // ignore this exception
+        }
+      }
+    }
+  }
+
+  /**
    * Adds a new transport to this client.
    * @param transport the transport object to add
    */
@@ -334,9 +519,36 @@ public class Client {
     this.increment (StatType.Counter, key, value);
   }
 
+  /**
+   * increment a counter with trackingTypeValue set to 0
+   * @param type - type of the counter
+   * @param key - the name of the counter to increment
+   * @param value - the amount to increment the counter by
+   */
   public void increment (StatType type, String key, int value) {
+    this.increment (type, key, value, 0);
+  }
+
+  /**
+   * increment a timer type counter
+   * @param key the name of the counter to increment
+   * @param value the amount to increment the counter by
+   * @param trackingTypeValue - specifies what extra stats to keep for the counter
+   */
+  public void incrementTimer(String key, int value, int trackingTypeValue) {
+    this.increment(StatType.Timer, key, value, trackingTypeValue);
+  }
+
+  /**
+   * increment a counter
+   * @param type - type of the counter
+   * @param key - the name of the counter to increment
+   * @param value - the amount to increment the counter by
+   * @param trackingTypeValue - specifies what extra stats to keep for the counter,
+   *        ignored for non-timer type counters
+   */
+  public void increment (StatType type, String key, int value, int trackingTypeValue) {
     String realKey = key;
-    StatsMessage realValue = new StatsMessage();
 
     // create the HashMap if it doesn't exist
     if(this.stats == null) {
@@ -348,18 +560,15 @@ public class Client {
       // determine the key from the calling class and line number
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
-    realValue.setKey(realKey);
-    realValue.setType(type);
 
-    // increment the counter if it exists
-    StatsMessage tmp = (StatsMessage) this.stats.get(realKey);
-    if(tmp != null) {
-      realValue.setCounter(tmp.getCounter() + value);
-    } else {
-      realValue.setCounter(value);
+    StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
+    if(realValue == null) {
+      // create the counter if doesn't exist
+      realValue = new StatsMessage(realKey, type, trackingTypeValue);
+      this.stats.put(realKey, realValue);
     }
-
-    this.stats.put(realKey, realValue);
+    // update the counter
+    realValue.incrementBy(value);
   }
 
   /**
@@ -382,7 +591,7 @@ public class Client {
    * @param key the name of the counter to decrement
    */
   public void decrement(String key) {
-    this.increment(StatType.Counter, key, 1);
+    this.decrement(StatType.Counter, key, 1);
   }
 
   /**
@@ -391,7 +600,7 @@ public class Client {
    * @param value the amount to decrement the counter by
    */
   public void decrement(String key, int value) {
-    this.increment(StatType.Counter, key, value * (-1));
+    this.decrement(StatType.Counter, key, value);
   }
 
   public void decrement(StatType type, String key, int value) {
@@ -408,7 +617,7 @@ public class Client {
   }
 
   /**
-   * Sets the counter to the specified val ue.
+   * Sets the counter to the specified value.
    * @param key the name of the counter key to set
    * @param value the value to set this counter to
    */
@@ -429,11 +638,10 @@ public class Client {
       this.stats = new ConcurrentHashMap<String,StatsMessage>();
     }
 
-    // set the counter
-    StatsMessage realValue = new StatsMessage();
-    realValue.setKey(realKey);
+    // create and set the gauge counter, this will overwrite the counter
+    // if it already exists
+    StatsMessage realValue = new StatsMessage(realKey, type, 0);
     realValue.setCounter(value);
-    realValue.setType(type);
     this.stats.put(realKey, realValue);
   }
 

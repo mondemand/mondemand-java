@@ -3,7 +3,9 @@ package org.mondemand;
 public enum StatType {
   Unknown("unknown"),
   Gauge("gauge"),
-  Counter("counter");
+  Counter("counter"),
+  Timer("counter");         // timer itself is a counter, but extra stats we may
+                            // emit, like min/max/avg/..., are gauges.
 
   public final String type;
 

@@ -14,10 +14,14 @@ package org.mondemand.transport;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Collections;
 
 import org.mondemand.Context;
 import org.mondemand.LogMessage;
+import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
+import org.mondemand.TimerStatTrackType;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
@@ -167,10 +171,19 @@ public class LWESTransport
       statsMsg.setUInt16("num", messages.length);
 
       // for each statistic, set the values
-      for(int i=0; i<messages.length; ++i) {
-        statsMsg.setString("t" + i, messages[i].getType().toString());
-        statsMsg.setString("k" + i, messages[i].getKey());
-        statsMsg.setInt64("v" + i, messages[i].getCounter());
+      int idx=0;
+      for(StatsMessage msg: messages) {
+        synchronized(msg) {
+          // synchronize on msg to make sure some other threads are not updating it
+          // at the same time, otherwise there may be exception during sorting
+          setLwesEvent(statsMsg, msg.getType().toString(), msg.getKey(),
+              msg.getCounter(), idx);
+          idx++;
+          if(msg.getType() == StatType.Timer) {
+            // add messages for extra stats for timer stat
+            idx = updateLwesEventForTimers(statsMsg, msg, idx);
+          }
+        }
       }
 
       // set the contextual data in the event
@@ -187,6 +200,62 @@ public class LWESTransport
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
+  }
+
+  /**
+   * sets a type/key/value in an lwes event object's message part
+   * @param statsMsg - the lwes event object
+   * @param type - the event's type
+   * @param key - the event's key
+   * @param value - the event's value
+   * @param index - the index used for the type/key/value
+   */
+  protected void setLwesEvent(Event statsMsg, String type, String key, long value,
+      int index) {
+    statsMsg.setString("t" + index, type);
+    statsMsg.setString("k" + index, key);
+    statsMsg.setInt64("v" + index, value);
+  }
+
+  /**
+   * update an lwes event with the extra stats (min/max/...) for a timer stat.
+   *
+   * @param statsMsg - the lwes event to be updated
+   * @param msg - the StatsMessage object to update the event
+   * @param index - the index to be incremented and used to lwes event
+   * @return the last index that was added in this method.
+   */
+  protected int updateLwesEventForTimers(Event statsMsg, StatsMessage msg,
+      int index) {
+    // already synchronized on msg in the calling method
+    int samplesSize = msg.getSamples().size() - 1;
+    if(msg.getTrackingTypeValue() > 0 && samplesSize >= 0) {
+      // first sort the samples
+      ArrayList<Long> sortedSamples = msg.getSamples();
+      Collections.sort(sortedSamples);
+
+      for(TimerStatTrackType trackType: TimerStatTrackType.values()) {
+        // check if a specific trackType is set for msg, if so emit that
+        if( (msg.getTrackingTypeValue() & trackType.value) ==
+            trackType.value) {
+          long value = 0;
+          if(trackType.value == TimerStatTrackType.AVG.value) {
+            // value for average is not coming from sortedSamples
+            value = msg.getTimerCounter()/msg.getTimerUpdateCounts();
+          } else {
+            value = sortedSamples.get((int)(samplesSize * trackType.indexInSamples));
+          }
+          // "min_", "max_", ... will be added to the original key
+          // all these stats are gauges.
+          setLwesEvent(statsMsg, StatType.Gauge.toString(),
+                trackType.keyPrefix + msg.getKey(), value, index);
+          index++;
+        }
+      }
+    }
+    // clear the samples, and counters for timer stats
+    msg.resetSamples();
+    return index;
   }
 
   private static final String PROG_ID_KEY  = "mondemand.prog_id";
