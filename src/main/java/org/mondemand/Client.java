@@ -68,10 +68,10 @@ public class Client {
    * object to auto emit the stats and logs
    */
   public class ClientStatEmitter implements Runnable {
-    private final Client client;        // client to emit stats for
-    private final int intervalMS;       // emit interval in milli seconds
-    private final boolean clearStats;   // if the stats should be cleared after flush
-    private boolean stop = false;       // if the emitter should stop
+    private final Client client;            // client to emit stats for
+    private final int intervalMS;           // emit interval in milli seconds
+    private final boolean clearStats;       // if the stats should be cleared after flush
+    private volatile boolean stop = false;  // if the emitter should stop
     /**
      * constructor
      * @param client - the client to emit stats for
@@ -411,8 +411,6 @@ public class Client {
         addTransport( new LWESTransport(InetAddress.getByName(addresses[cnt]),
             port.intValue(), null) );
       }
-    } catch (Exception ex) {
-      throw new Exception(ex);
     } finally {
       if (input != null) {
         try {

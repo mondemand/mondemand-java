@@ -27,7 +27,7 @@ public class StatsMessage implements Serializable {
 
   // the following attributes are used for timer counters where we may want to
   // keep more stats like min/max/98 percentile/....
-  private ArrayList<Long> samples = null;             // a sample of entries for timer counter
+  private ArrayList<Integer> samples = null;          // a sample of entries for timer counter
   public static final int MAX_SAMPLES_COUNT = 1000;   // max number of sample entries to keep
   private long timerCounter = 0;        // counter for timers, we need a separate
                                         // counter since timer stats are gauge.
@@ -50,7 +50,7 @@ public class StatsMessage implements Serializable {
     // tracking type value and samples are only applicable to timer counters
     if(type == StatType.Timer) {
       this.trackingTypeValue = trackingTypeValue;
-      samples = new ArrayList<Long>(MAX_SAMPLES_COUNT);
+      samples = new ArrayList<Integer>(MAX_SAMPLES_COUNT);
     }
   }
 
@@ -86,7 +86,7 @@ public class StatsMessage implements Serializable {
   /**
    * @return samples for timer counters
    */
-  public ArrayList<Long> getSamples() {
+  public ArrayList<Integer> getSamples() {
     return samples;
   }
 
@@ -108,7 +108,7 @@ public class StatsMessage implements Serializable {
    * increments the counter by some value, replaces setCounter()
    * @param value - value to increment by
    */
-  public void incrementBy(long value) {
+  public void incrementBy(int value) {
     // synchronize on this object so it won't be updated while another
     // thread is sending this instance's stats
     synchronized(this) {

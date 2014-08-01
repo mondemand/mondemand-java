@@ -231,7 +231,7 @@ public class LWESTransport
     int samplesSize = msg.getSamples().size() - 1;
     if(msg.getTrackingTypeValue() > 0 && samplesSize >= 0) {
       // first sort the samples
-      ArrayList<Long> sortedSamples = msg.getSamples();
+      ArrayList<Integer> sortedSamples = msg.getSamples();
       Collections.sort(sortedSamples);
 
       for(TimerStatTrackType trackType: TimerStatTrackType.values()) {

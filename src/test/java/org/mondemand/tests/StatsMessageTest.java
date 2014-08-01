@@ -12,7 +12,7 @@ import org.mondemand.StatsMessage;
 public class StatsMessageTest {
 
   /**
-   * this tests counter and gauge StateMessage types.
+   * this tests counter and gauge StatMessage types.
    */
   @Test
   public void testCounterGaugeStats() {
@@ -52,7 +52,7 @@ public class StatsMessageTest {
   }
 
   /**
-   * this tests timer StateMessage type.
+   * this tests timer StatMessage type.
    */
   @Test
   public void testTimerStat() {
@@ -85,6 +85,12 @@ public class StatsMessageTest {
       assertEquals(msg.getSamples().size(),
           (sampleSize > StatsMessage.MAX_SAMPLES_COUNT
               ? StatsMessage.MAX_SAMPLES_COUNT : sampleSize));
-     }
+      // reset the samples and check the values
+      msg.resetSamples();
+      assertEquals(0, msg.getTimerCounter());
+      assertEquals(0, msg.getTimerUpdateCounts());
+      assertEquals(trackType, msg.getTrackingTypeValue());
+      assertEquals(msg.getSamples().size(), 0);
+    }
   }
 }

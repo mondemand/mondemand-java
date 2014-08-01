@@ -11,11 +11,7 @@
  *======================================================================*/
 package org.mondemand.tests;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -317,7 +313,7 @@ public class ClientTest {
       // get the samples for the stats for the given key
       @SuppressWarnings("unchecked")
       ConcurrentHashMap<String,StatsMessage> clientStats = (ConcurrentHashMap<String,StatsMessage>)timerStats.get(client);
-      ArrayList<Long> timerSamples = new ArrayList<Long>(clientStats.get(key).getSamples());
+      ArrayList<Integer> timerSamples = new ArrayList<Integer>(clientStats.get(key).getSamples());
       Collections.copy(timerSamples, clientStats.get(key).getSamples());
       Collections.sort(timerSamples);
 
@@ -337,8 +333,8 @@ public class ClientTest {
         // check the emitter's maps
         if( (timerStatTypesToCheck[typeIdx] & trackType.value) ==
             trackType.value) {
-          // we check something like "t1=counter", "k1=min_SomeKey_0", "v1=10",
-          // "t2=counter", "k2=pctl_95_SomeKey_0", "v2=9500", all extra stats
+          // we check something like "t1=gauge", "k1=min_SomeKey_0", "v1=10",
+          // "t2=gauge", "k2=pctl_95_SomeKey_0", "v2=9500", all extra stats
           // are gauges
           assertEquals(u.eventTypes.get("t" + idx), "gauge");
           assertEquals(u.eventKeys.get("k" + idx), trackType.keyPrefix + key);
@@ -525,7 +521,7 @@ public class ClientTest {
 
     } catch(Exception e) {
       // should no see any exceptions
-      assertNotNull(null);
+      fail("this should never happen!");
     }
   }
 
