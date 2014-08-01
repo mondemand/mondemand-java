@@ -406,7 +406,9 @@ public class ClientTest {
     assertEquals(u.eventTypes.size(), 0);
     assertEquals(u.eventKeys.size(), 0);
     assertEquals(u.eventValues.size(), 0);
-  }
+
+    client.finalize();
+}
 
   /**
    * this will test the addTransportsFromConfigFile method where we get the
