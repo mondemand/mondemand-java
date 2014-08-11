@@ -524,7 +524,7 @@ public class Client {
    * @param value - the amount to increment the counter by
    */
   public void increment (StatType type, String key, int value) {
-    this.increment (type, key, value, 0);
+    this.increment (type, key, value, 0, 0);
   }
 
   /**
@@ -534,7 +534,19 @@ public class Client {
    * @param trackingTypeValue - specifies what extra stats to keep for the counter
    */
   public void incrementTimer(String key, int value, int trackingTypeValue) {
-    this.increment(StatType.Timer, key, value, trackingTypeValue);
+    this.incrementTimer(key, value, trackingTypeValue, StatsMessage.MAX_SAMPLES_COUNT);
+  }
+
+  /**
+   * increment a timer type counter and reseting the maximum number of samples
+   * @param key the name of the counter to increment
+   * @param value the amount to increment the counter by
+   * @param trackingTypeValue - specifies what extra stats to keep for the counter
+   * @param samplesMaxCount - maximum number of samples to keep for the counter
+   */
+  public void incrementTimer(String key, int value, int trackingTypeValue,
+      int samplesMaxCount) {
+   this.increment(StatType.Timer, key, value, trackingTypeValue, samplesMaxCount);
   }
 
   /**
@@ -545,7 +557,8 @@ public class Client {
    * @param trackingTypeValue - specifies what extra stats to keep for the counter,
    *        ignored for non-timer type counters
    */
-  public void increment (StatType type, String key, int value, int trackingTypeValue) {
+  public void increment (StatType type, String key, int value,
+      int trackingTypeValue, int samplesMaxCount) {
     String realKey = key;
 
     // create the HashMap if it doesn't exist
@@ -562,7 +575,7 @@ public class Client {
     StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
-      realValue = new StatsMessage(realKey, type, trackingTypeValue);
+      realValue = new StatsMessage(realKey, type, trackingTypeValue, samplesMaxCount);
       this.stats.put(realKey, realValue);
     }
     // update the counter
@@ -638,7 +651,7 @@ public class Client {
 
     // create and set the gauge counter, this will overwrite the counter
     // if it already exists
-    StatsMessage realValue = new StatsMessage(realKey, type, 0);
+    StatsMessage realValue = new StatsMessage(realKey, type, 0, 0);
     realValue.setCounter(value);
     this.stats.put(realKey, realValue);
   }

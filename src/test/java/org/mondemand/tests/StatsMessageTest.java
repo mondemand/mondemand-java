@@ -21,7 +21,7 @@ public class StatsMessageTest {
     for(int i=0; i<typesToTest.length; i++) {
       String key = "Key_" + rnd.nextInt();
       int trackType = rnd.nextInt();
-      StatsMessage msg = new StatsMessage(key, typesToTest[i], trackType);
+      StatsMessage msg = new StatsMessage(key, typesToTest[i], trackType, StatsMessage.MAX_SAMPLES_COUNT);
       assertEquals(key, msg.getKey());
       assertEquals(typesToTest[i], msg.getType());
       assertEquals(0, msg.getCounter());
@@ -43,6 +43,7 @@ public class StatsMessageTest {
       assertEquals(0, msg.getTimerUpdateCounts());
       assertEquals(0, msg.getTrackingTypeValue());
       assertNull(msg.getSamples());
+      assertEquals(0, msg.getSamplesMaxCount());
 
       // set value
       int nextVal = rnd.nextInt();
@@ -61,7 +62,17 @@ public class StatsMessageTest {
 
     for(int i=0; i<100; i++) {
       int trackType = rnd.nextInt() + 1;
-      StatsMessage msg = new StatsMessage(key, StatType.Timer, trackType);
+      // examine sampleMaxCount of negative, less than 1000, and more than 1000
+      int sampleMaxCount = StatsMessage.MAX_SAMPLES_COUNT;
+      if(rnd.nextInt(2) == 1) {
+        sampleMaxCount += rnd.nextInt(500);
+      } else {
+        sampleMaxCount -= rnd.nextInt(500);
+      }
+      if(rnd.nextInt(2) == 1) {
+        sampleMaxCount *= -1;
+      }
+      StatsMessage msg = new StatsMessage(key, StatType.Timer, trackType, sampleMaxCount);
       assertEquals(key, msg.getKey());
       assertEquals(StatType.Timer, msg.getType());
       assertEquals(0, msg.getCounter());
@@ -83,8 +94,8 @@ public class StatsMessageTest {
       assertEquals(sampleSize, msg.getTimerUpdateCounts());
       assertEquals(trackType, msg.getTrackingTypeValue());
       assertEquals(msg.getSamples().size(),
-          (sampleSize > StatsMessage.MAX_SAMPLES_COUNT
-              ? StatsMessage.MAX_SAMPLES_COUNT : sampleSize));
+          (sampleSize > (sampleMaxCount <= 0 ? StatsMessage.MAX_SAMPLES_COUNT : sampleMaxCount)
+              ? (sampleMaxCount <= 0 ? StatsMessage.MAX_SAMPLES_COUNT : sampleMaxCount) : sampleSize));
       // reset the samples and check the values
       msg.resetSamples();
       assertEquals(0, msg.getTimerCounter());

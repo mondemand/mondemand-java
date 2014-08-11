@@ -28,7 +28,8 @@ public class StatsMessage implements Serializable {
   // the following attributes are used for timer counters where we may want to
   // keep more stats like min/max/98 percentile/....
   private ArrayList<Integer> samples = null;          // a sample of entries for timer counter
-  public static final int MAX_SAMPLES_COUNT = 1000;   // max number of sample entries to keep
+  public static final int MAX_SAMPLES_COUNT = 1000;   // default max number of sample entries to keep
+  private int samplesMaxCount;          // max number of sample entries to keep
   private long timerCounter = 0;        // counter for timers, we need a separate
                                         // counter since timer stats are gauge.
   private int timerUpdateCounts = 0;    // number of times counter is updated
@@ -43,14 +44,18 @@ public class StatsMessage implements Serializable {
    * @param trackingTypeValue - bitwise value, specifies what extra stats
    *        (min/max/...) should be kept for a timer counter, ignored for
    *        non-timer counters.
+   * @param samplesMaxCount - maximum number of samples to keep, ignored if
+   *        less than or equal to 0.
    */
-  public StatsMessage(String key, StatType type, int trackingTypeValue) {
+  public StatsMessage(String key, StatType type, int trackingTypeValue,
+      int samplesMaxCount) {
     this.key = key;
     this.type = type;
-    // tracking type value and samples are only applicable to timer counters
+    // tracking type value, samplesMaxCount and samples are only applicable to timer counters
     if(type == StatType.Timer) {
       this.trackingTypeValue = trackingTypeValue;
-      samples = new ArrayList<Integer>(MAX_SAMPLES_COUNT);
+      this.samplesMaxCount = (samplesMaxCount <= 0 ? MAX_SAMPLES_COUNT : samplesMaxCount);
+      samples = new ArrayList<Integer>(this.samplesMaxCount);
     }
   }
 
@@ -117,14 +122,14 @@ public class StatsMessage implements Serializable {
       if(type == StatType.Timer) {
         timerCounter += value;
         timerUpdateCounts++;
-        if(samples.size() < MAX_SAMPLES_COUNT) {
+        if(samples.size() < samplesMaxCount) {
           // add new value to samples if it has space
           samples.add(value);
         } else {
           // otherwise, replace one of the entries with the new value
-          // with the probability of "MAX_SAMPLES_COUNT / timerUpdateCounts"
+          // with the probability of "samplesCount / timerUpdateCounts"
           int indexToReplace = rand.nextInt(timerUpdateCounts);   // from 0 to timerUpdateCounts-1
-          if( indexToReplace < MAX_SAMPLES_COUNT) {
+          if( indexToReplace < samplesMaxCount) {
             samples.set(indexToReplace, value);
           }
         }
@@ -149,6 +154,13 @@ public class StatsMessage implements Serializable {
    */
   public void setCounter(long counter) {
     this.counter = counter;
+  }
+
+  /**
+   * @return the maximum number of samples we keep for this object
+   */
+  public int getSamplesMaxCount() {
+    return samplesMaxCount;
   }
 
   /**
