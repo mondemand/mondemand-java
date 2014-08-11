@@ -228,22 +228,26 @@ public class LWESTransport
   protected int updateLwesEventForTimers(Event statsMsg, StatsMessage msg,
       int index) {
     // already synchronized on msg in the calling method
-    int samplesSize = msg.getSamples().size() - 1;
-    if(msg.getTrackingTypeValue() > 0 && samplesSize >= 0) {
+    if(msg.getTrackingTypeValue() > 0) {
       // first sort the samples
       ArrayList<Integer> sortedSamples = msg.getSamples();
       Collections.sort(sortedSamples);
 
+      // go through all the trackTypes and if one is set for the counter, emit that
       for(TimerStatTrackType trackType: TimerStatTrackType.values()) {
-        // check if a specific trackType is set for msg, if so emit that
-        if( (msg.getTrackingTypeValue() & trackType.value) ==
-            trackType.value) {
+        if( (msg.getTrackingTypeValue() & trackType.value) == trackType.value) {
+          // default value (in case samples were not updated since last emit)
           long value = 0;
-          if(trackType.value == TimerStatTrackType.AVG.value) {
-            // value for average is not coming from sortedSamples
-            value = msg.getTimerCounter()/msg.getTimerUpdateCounts();
+          if(sortedSamples.size() != 0) {
+            if(trackType.value == TimerStatTrackType.AVG.value) {
+              // value for average is not coming from sortedSamples
+              value = msg.getTimerCounter()/msg.getTimerUpdateCounts();
+            } else {
+              value = sortedSamples.get((int)( (sortedSamples.size() - 1)* trackType.indexInSamples));
+            }
           } else {
-            value = sortedSamples.get((int)(samplesSize * trackType.indexInSamples));
+            // samples were not updated, i.e., no increment since the last
+            // emit, so send a value of 0
           }
           // "min_", "max_", ... will be added to the original key
           // all these stats are gauges.

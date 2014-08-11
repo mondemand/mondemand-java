@@ -362,53 +362,107 @@ public class ClientTest {
   }
 
   /**
-   * this will test the auto amit feature in the client
+   * this will test the auto amit feature in the client, one time
+   * with reseting the stats after each emit and one time with keeping the stats
    */
   @Test
   public void testAutoEmitter() throws Exception  {
     // auto emit once every second
-    Client client = new Client("ClientTestTimer", true, true, 1);
-    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
-    client.addTransport(localLwesTransport);
-    Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
-    emitter.setAccessible(true);
-    StubUnicastEventEmitter u = new StubUnicastEventEmitter();
-    u.setAddress(InetAddress.getLocalHost());
-    u.setPort(9292);
-    emitter.set(localLwesTransport, u);
+    boolean[] keepOrDropStats = new boolean[]{true, false};
+    for(int kods = 0; kods < keepOrDropStats.length; kods++) {
+      Client client = new Client("ClientTestTimer", true, keepOrDropStats[kods], 1);
+      LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+      client.addTransport(localLwesTransport);
+      Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
+      emitter.setAccessible(true);
+      StubUnicastEventEmitter u = new StubUnicastEventEmitter();
+      u.setAddress(InetAddress.getLocalHost());
+      u.setPort(9292);
+      emitter.set(localLwesTransport, u);
 
-    // create a bunch of stats
-    int Count = 100;
-    for(int cnt=0; cnt<Count; ++cnt) {
-      client.increment("key_" + cnt, cnt);
+      // create a bunch of regular counter stats
+      int Count = 100;
+      for(int cnt=0; cnt<Count; ++cnt) {
+        client.increment("key_" + cnt, cnt);
+      }
+      // create a bunch of timer counter stats
+     for(int cnt=0; cnt<Count; ++cnt) {
+        client.incrementTimer("timerkey_" + cnt, cnt, TimerStatTrackType.AVG.value);
+      }
+      // now sleep for 1.2 sec to make sure auto emit kicks in
+      Thread.sleep(1200);
+
+      // make sure Count*3 number of type/key/values are emitted, one for regular
+      // counter, one for timer counter, and one for avg value of the timer counter.
+      assertEquals(u.eventTypes.size(), Count*3);
+      assertEquals(u.eventKeys.size(), Count*3);
+      assertEquals(u.eventValues.size(), Count*3);
+
+      // now check the type/key/values in the emitter object
+      for(int idx=0; idx<Count*3; ++idx) {
+        assertNotNull(u.eventKeys.get("k" + idx));
+        // extract the key
+        String key = u.eventKeys.get("k" + idx);
+        int val = 0;
+        if(key.startsWith("key_")) {
+          // regular key
+          assertEquals(u.eventTypes.get("t" + idx), "counter");
+          val = Integer.parseInt(key.substring( "key_".length() ));
+        } else if(key.startsWith("timerkey_")) {
+          // timer key
+          assertEquals(u.eventTypes.get("t" + idx), "counter");
+          val = Integer.parseInt(key.substring( "timerkey_".length() ));
+       } else if(key.startsWith("avg_timerkey_")) {
+          // average for timer key
+          assertEquals(u.eventTypes.get("t" + idx), "gauge");
+          val = Integer.parseInt(key.substring( "avg_timerkey_".length() ));
+        } else {
+          // should never happen.
+          assertNotNull(null);
+        }
+        assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+      }
+
+      u.clearMaps();
+
+      // now sleep for 1.2 sec without emiting anything
+      Thread.sleep(1200);
+      if(keepOrDropStats[kods]) {
+        // we are reseting all stats, there should not be anything emitted
+        assertEquals(u.eventTypes.size(), 0);
+        assertEquals(u.eventKeys.size(), 0);
+        assertEquals(u.eventValues.size(), 0);
+      } else {
+        // we are not reseting the stats, the same keys with the same values should be emitted
+        // the value for averages for timer counter should be 0 since average is a gauge
+        for(int idx=0; idx<Count*3; ++idx) {
+          assertNotNull(u.eventKeys.get("k" + idx));
+          // extract the key
+          String key = u.eventKeys.get("k" + idx);
+          int val = 0;
+          if(key.startsWith("key_")) {
+            // regular key
+            assertEquals(u.eventTypes.get("t" + idx), "counter");
+            val = Integer.parseInt(key.substring( "key_".length() ));
+          } else if(key.startsWith("timerkey_")) {
+            // timer key
+            assertEquals(u.eventTypes.get("t" + idx), "counter");
+            val = Integer.parseInt(key.substring( "timerkey_".length() ));
+         } else if(key.startsWith("avg_timerkey_")) {
+            // average for timer key, should be reset to 0
+            assertEquals(u.eventTypes.get("t" + idx), "gauge");
+            val = 0;
+          } else {
+            // should never happen.
+            assertNotNull(null);
+          }
+          assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+        }
+      }
+
+      client.finalize();
     }
-    // now sleep for 1.5 sec to make sure auto emit kicks in
-    Thread.sleep(1500);
-
-    // make sure Count number of type/key/values are emitted
-    assertEquals(u.eventTypes.size(), Count);
-    assertEquals(u.eventKeys.size(), Count);
-    assertEquals(u.eventValues.size(), Count);
-
-    // now check the type/key/values in the emitter object
-    for(int idx=0; idx<Count; ++idx) {
-      assertEquals(u.eventTypes.get("t" + idx), "counter");
-      assertNotNull(u.eventKeys.get("k" + idx));
-      // extract the idx from key
-      String key = u.eventKeys.get("k" + idx);
-      int val = Integer.parseInt(key.substring( "key_".length() ));
-      assertEquals(u.eventValues.get("v" + idx).longValue(), val);
-    }
-    u.clearMaps();
-
-    // now sleep for 1.5 sec, there should not be anything emitted
-    Thread.sleep(1500);
-    assertEquals(u.eventTypes.size(), 0);
-    assertEquals(u.eventKeys.size(), 0);
-    assertEquals(u.eventValues.size(), 0);
-
-    client.finalize();
-}
+  }
 
   /**
    * this will test the addTransportsFromConfigFile method where we get the

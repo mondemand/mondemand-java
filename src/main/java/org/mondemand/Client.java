@@ -556,6 +556,7 @@ public class Client {
    * @param value - the amount to increment the counter by
    * @param trackingTypeValue - specifies what extra stats to keep for the counter,
    *        ignored for non-timer type counters
+   * @param samplesMaxCount - maximum number of samples to keep for the counter
    */
   public void increment (StatType type, String key, int value,
       int trackingTypeValue, int samplesMaxCount) {
