@@ -1,6 +1,6 @@
 Version 5.1.0
   * added (optional, disabled by default) feature to automatically emit stats and logs
-  * added a new timer-type stat with capability to emit any of min, max, avg,
+  * added a new Sample message with capability to emit any of min, max, avg,
     median, 75/90/95/98/99 percentiles
   * added new method to the client to specify the mondemand server address
     through a config file
