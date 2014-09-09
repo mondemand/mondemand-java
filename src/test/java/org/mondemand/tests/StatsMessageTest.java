@@ -19,89 +19,40 @@ public class StatsMessageTest {
     Random rnd = new Random();
     StatType[] typesToTest = new StatType[]{StatType.Counter, StatType.Gauge};
     for(int i=0; i<typesToTest.length; i++) {
-      String key = "Key_" + rnd.nextInt();
-      int trackType = rnd.nextInt();
-      StatsMessage msg = new StatsMessage(key, typesToTest[i], trackType, StatsMessage.MAX_SAMPLES_COUNT);
-      assertEquals(key, msg.getKey());
-      assertEquals(typesToTest[i], msg.getType());
-      assertEquals(0, msg.getCounter());
-      assertEquals(0, msg.getTimerCounter());
-      assertEquals(0, msg.getTimerUpdateCounts());
-      assertEquals(0, msg.getTrackingTypeValue());
-      assertNull(msg.getSamples());
-      // start adding stuff to the stat
-      long total = 0;
-      for(int cnt=0; cnt<1000; cnt++) {
-        int nextVal = rnd.nextInt();
-        msg.incrementBy(nextVal);
-        total += nextVal;
-      }
-      // check the values again
-      assertEquals(total, msg.getCounter());
-      // all timer related stats should be unaffected.
-      assertEquals(0, msg.getTimerCounter());
-      assertEquals(0, msg.getTimerUpdateCounts());
-      assertEquals(0, msg.getTrackingTypeValue());
-      assertNull(msg.getSamples());
-      assertEquals(0, msg.getSamplesMaxCount());
+      for(int j=0; j<100; ++j) {
+        String key = "Key_" + rnd.nextInt();
+        StatsMessage msg = new StatsMessage(key, typesToTest[i]);
+        assertEquals(key, msg.getKey());
+        assertEquals(typesToTest[i], msg.getType());
+        assertEquals(0, msg.getCounter());
 
-      // set value
-      int nextVal = rnd.nextInt();
-      msg.setCounter(nextVal);
-      assertEquals(nextVal, msg.getCounter());
-    }
-  }
+        // start adding stuff to the stat
+        long total = 0;
+        for(int cnt=0; cnt<1000; cnt++) {
+          int nextVal = rnd.nextInt();
+          msg.incrementBy(nextVal);
+          total += nextVal;
+        }
+        // check the values again
+        assertEquals(key, msg.getKey());
+        assertEquals(typesToTest[i], msg.getType());
+        assertEquals(total, msg.getCounter());
+        String[] strVal = msg.toString().split(" : ");
+        assertEquals(typesToTest[i].toString(), strVal[0]);
+        assertEquals(key, strVal[1]);
+        assertEquals(total + "", strVal[2]);
 
-  /**
-   * this tests timer StatMessage type.
-   */
-  @Test
-  public void testTimerStat() {
-    Random rnd = new Random();
-    String key = "Key_" + rnd.nextInt();
-
-    for(int i=0; i<100; i++) {
-      int trackType = rnd.nextInt() + 1;
-      // examine sampleMaxCount of negative, less than 1000, and more than 1000
-      int sampleMaxCount = StatsMessage.MAX_SAMPLES_COUNT;
-      if(rnd.nextInt(2) == 1) {
-        sampleMaxCount += rnd.nextInt(500);
-      } else {
-        sampleMaxCount -= rnd.nextInt(500);
+        // set methods
+        String newKey = "Key_" + rnd.nextInt();
+        StatType newType = (rnd.nextInt(2) == 0 ? StatType.Counter : StatType.Gauge);
+        int newValue = rnd.nextInt();
+        msg.setKey(newKey);
+        msg.setType(newType);
+        msg.setCounter(newValue);
+        assertEquals(newKey, msg.getKey());
+        assertEquals(newType, msg.getType());
+        assertEquals(newValue, msg.getCounter());
       }
-      if(rnd.nextInt(2) == 1) {
-        sampleMaxCount *= -1;
-      }
-      StatsMessage msg = new StatsMessage(key, StatType.Timer, trackType, sampleMaxCount);
-      assertEquals(key, msg.getKey());
-      assertEquals(StatType.Timer, msg.getType());
-      assertEquals(0, msg.getCounter());
-      assertEquals(0, msg.getTimerCounter());
-      assertEquals(0, msg.getTimerUpdateCounts());
-      assertEquals(trackType, msg.getTrackingTypeValue());
-      assertEquals(msg.getSamples().size(), 0);
-      // increment counter, different sizes for samples
-      int sampleSize = rnd.nextInt(1000) + 500;
-      long total = 0;
-      for(int cnt=0; cnt<sampleSize; cnt++) {
-        int nextVal = rnd.nextInt();
-        msg.incrementBy(nextVal);
-        total += nextVal;
-      }
-      // check the values again
-      assertEquals((long)total, (long)msg.getCounter());
-      assertEquals(total, msg.getTimerCounter());
-      assertEquals(sampleSize, msg.getTimerUpdateCounts());
-      assertEquals(trackType, msg.getTrackingTypeValue());
-      assertEquals(msg.getSamples().size(),
-          (sampleSize > (sampleMaxCount <= 0 ? StatsMessage.MAX_SAMPLES_COUNT : sampleMaxCount)
-              ? (sampleMaxCount <= 0 ? StatsMessage.MAX_SAMPLES_COUNT : sampleMaxCount) : sampleSize));
-      // reset the samples and check the values
-      msg.resetSamples();
-      assertEquals(0, msg.getTimerCounter());
-      assertEquals(0, msg.getTimerUpdateCounts());
-      assertEquals(trackType, msg.getTrackingTypeValue());
-      assertEquals(msg.getSamples().size(), 0);
     }
   }
 }

@@ -56,6 +56,7 @@ public class Client {
   private ConcurrentHashMap<String,Context> contexts = null;
   private ConcurrentHashMap<String,LogMessage> messages = null;
   private ConcurrentHashMap<String,StatsMessage> stats = null;
+  private ConcurrentHashMap<String,SamplesMessage> samples = null;
   private Vector<Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
@@ -100,15 +101,13 @@ public class Client {
       while(!stop) {
         try {
           Thread.sleep(intervalMS);
-          client.flushStats(clearStats);
-          client.flushLogs();
+          client.flush(clearStats);
         } catch (InterruptedException e) {
           // if we are interrupted, it will check for the stop flag
         }
       }
       // final flush
-      client.flushStats(clearStats);
-      client.flushLogs();
+      client.flush(clearStats);
     }
   }
 
@@ -137,6 +136,7 @@ public class Client {
     contexts = new ConcurrentHashMap<String,Context>();
     messages = new ConcurrentHashMap<String,LogMessage>();
     stats = new ConcurrentHashMap<String,StatsMessage>();
+    samples = new ConcurrentHashMap<String,SamplesMessage>();
     transports = new Vector<Transport>();
 
     // create and start the emitter thread
@@ -197,9 +197,8 @@ public class Client {
    */
   @Override
   public void finalize() {
-    // try to flush all logs and stats
-    flushLogs();
-    flushStats();
+    // try to flush all logs, stats and samples
+    flush();
 
     // stop the auto-emit thread
     if(emitterThread != null) {
@@ -218,6 +217,7 @@ public class Client {
     contexts.clear();
     messages.clear();
     stats.clear();
+    samples.clear();
 
     // shutdown all the transports
     if(transports != null) {
@@ -453,6 +453,28 @@ public class Client {
   }
 
   /**
+   * flushes all logs, stats, and samples to the transports.
+   */
+  public void flush() {
+    this.flush(false);
+  }
+
+  /**
+   * flushes all logs, stats, and samples to the transports.
+   * @param resetStats - whether or not stats should be reset after flush
+   */
+  public void flush(boolean resetStats) {
+    flushLogs();
+    dispatchStatsSamples();
+    if(resetStats && stats != null) {
+      stats.clear();
+    }
+    if(resetStats && samples != null) {
+      samples.clear();
+    }
+  }
+
+  /**
    * Flushes log data to the transports.
    */
   public void flushLogs() {
@@ -460,29 +482,6 @@ public class Client {
     if(messages != null) {
       messages.clear();
     }
-  }
-
-  /**
-   * Flushes statistics to the transports.
-   */
-  public void flushStats() {
-    this.flushStats(false);
-  }
-
-  /**
-   * Flushes statistics to the transports, but allows one to specify whether or not to reset the
-   * running statistics.
-   */
-  public void flushStats(boolean reset) {
-    dispatchStats();
-    if(reset && stats != null) {
-      stats.clear();
-    }
-  }
-
-  public void flush() {
-    flushLogs();
-    flushStats();
   }
 
   /**
@@ -518,48 +517,12 @@ public class Client {
   }
 
   /**
-   * increment a counter with trackingTypeValue set to 0
+   * increment a counter
    * @param type - type of the counter
    * @param key - the name of the counter to increment
    * @param value - the amount to increment the counter by
    */
   public void increment (StatType type, String key, int value) {
-    this.increment (type, key, value, 0, 0);
-  }
-
-  /**
-   * increment a timer type counter
-   * @param key the name of the counter to increment
-   * @param value the amount to increment the counter by
-   * @param trackingTypeValue - specifies what extra stats to keep for the counter
-   */
-  public void incrementTimer(String key, int value, int trackingTypeValue) {
-    this.incrementTimer(key, value, trackingTypeValue, StatsMessage.MAX_SAMPLES_COUNT);
-  }
-
-  /**
-   * increment a timer type counter and reseting the maximum number of samples
-   * @param key the name of the counter to increment
-   * @param value the amount to increment the counter by
-   * @param trackingTypeValue - specifies what extra stats to keep for the counter
-   * @param samplesMaxCount - maximum number of samples to keep for the counter
-   */
-  public void incrementTimer(String key, int value, int trackingTypeValue,
-      int samplesMaxCount) {
-   this.increment(StatType.Timer, key, value, trackingTypeValue, samplesMaxCount);
-  }
-
-  /**
-   * increment a counter
-   * @param type - type of the counter
-   * @param key - the name of the counter to increment
-   * @param value - the amount to increment the counter by
-   * @param trackingTypeValue - specifies what extra stats to keep for the counter,
-   *        ignored for non-timer type counters
-   * @param samplesMaxCount - maximum number of samples to keep for the counter
-   */
-  public void increment (StatType type, String key, int value,
-      int trackingTypeValue, int samplesMaxCount) {
     String realKey = key;
 
     // create the HashMap if it doesn't exist
@@ -576,11 +539,55 @@ public class Client {
     StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
-      realValue = new StatsMessage(realKey, type, trackingTypeValue, samplesMaxCount);
+      realValue = new StatsMessage(realKey, type);
       this.stats.put(realKey, realValue);
     }
     // update the counter
     realValue.incrementBy(value);
+  }
+
+  /**
+   * adds a new sample
+   * @param key - the name of the sample to add a new value to
+   * @param value - the amount to be added to sample
+   * @param trackingTypeValue - bitwise value, specifies what extra stats
+   *        (min/max/...) should be kept for a counter
+   */
+  public void addSample(String key, int value, int trackingTypeValue) {
+    this.addSample(key, value, trackingTypeValue, 0);
+  }
+
+  /**
+   * adds a new sample
+   * @param key - the name of the sample to add a new value to
+   * @param value - the amount to be added to sample
+   * @param trackingTypeValue - bitwise value, specifies what extra stats
+   *        (min/max/...) should be kept for a counter
+   * @param samplesMaxCount - maximum number of samples to keep, ignored if
+   *        less than or equal to 0.
+   */
+  public void addSample(String key, int value, int trackingTypeValue, int samplesMaxCount) {
+    String realKey = key;
+
+    // create the HashMap if it doesn't exist
+    if(this.samples == null) {
+      this.samples = new ConcurrentHashMap<String,SamplesMessage>();
+    }
+
+    // set the key
+    if(realKey == null) {
+      // determine the key from the calling class and line number
+      realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
+    }
+
+    SamplesMessage realValue = (SamplesMessage) this.samples.get(realKey);
+    if(realValue == null) {
+      // create the counter if doesn't exist
+      realValue = new SamplesMessage(realKey, trackingTypeValue, samplesMaxCount);
+      this.samples.put(realKey, realValue);
+    }
+    // update the counter
+    realValue.addSample(value);
   }
 
   /**
@@ -652,7 +659,7 @@ public class Client {
 
     // create and set the gauge counter, this will overwrite the counter
     // if it already exists
-    StatsMessage realValue = new StatsMessage(realKey, type, 0, 0);
+    StatsMessage realValue = new StatsMessage(realKey, type);
     realValue.setCounter(value);
     this.stats.put(realKey, realValue);
   }
@@ -1104,20 +1111,25 @@ public class Client {
   }
 
   /**
-   * Iterates through the transports, calling the sendStats method for each.
+   * Iterates through the transports, calling the send() method for each to send
+   * all the stats and samples.
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
-  private synchronized void dispatchStats() {
-    if(this.stats == null || this.transports == null) return;
+  private synchronized void dispatchStatsSamples() {
+    if(this.transports == null ||
+        (this.samples == null && this.stats == null)) {
+      return;
+    }
 
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
-      StatsMessage[] messages = this.stats.values().toArray(new StatsMessage[0]);
+      StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
+      SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
 
       for(int i=0; i<this.transports.size(); ++i) {
         Transport t = transports.elementAt(i);
         try {
-          t.sendStats(programId, messages, contexts);
+          t.send(programId, statsMsgs, samplesMsgs, contexts);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
@@ -1126,4 +1138,5 @@ public class Client {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);
     }
   }
+
 }

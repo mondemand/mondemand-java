@@ -46,9 +46,10 @@ import org.mondemand.Context;
 import org.mondemand.ErrorHandler;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
+import org.mondemand.SamplesMessage;
 import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
-import org.mondemand.TimerStatTrackType;
+import org.mondemand.SampleTrackType;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
@@ -249,7 +250,7 @@ public class ClientTest {
    * event, and there is no extras in the event.
    */
   @Test
-  public void testTimerStats() throws Exception {
+  public void testSamplesMessages() throws Exception {
     // create a client, with a transport's emitter that has the emit() stubbed out
     Client client = new Client("ClientTestTimer");
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
@@ -260,37 +261,37 @@ public class ClientTest {
     u.setAddress(InetAddress.getLocalHost());
     u.setPort(9292);
     emitter.set(localLwesTransport, u);
-    Field timerStats = client.getClass().getDeclaredField("stats");
-    timerStats.setAccessible(true);
+    Field sampleStats = client.getClass().getDeclaredField("samples");
+    sampleStats.setAccessible(true);
 
     // timer stat types to check, contains all individual types and some combinations
     int[] timerStatTypesToCheck = new int[]{
-        TimerStatTrackType.MIN.value,
-        TimerStatTrackType.MAX.value,
-        TimerStatTrackType.AVG.value,
-        TimerStatTrackType.MEDIAN.value,
-        TimerStatTrackType.PCTL_75.value,
-        TimerStatTrackType.PCTL_90.value,
-        TimerStatTrackType.PCTL_95.value,
-        TimerStatTrackType.PCTL_98.value,
-        TimerStatTrackType.PCTL_99.value,
+        SampleTrackType.MIN.value,
+        SampleTrackType.MAX.value,
+        SampleTrackType.AVG.value,
+        SampleTrackType.MEDIAN.value,
+        SampleTrackType.PCTL_75.value,
+        SampleTrackType.PCTL_90.value,
+        SampleTrackType.PCTL_95.value,
+        SampleTrackType.PCTL_98.value,
+        SampleTrackType.PCTL_99.value,
         // min & max
-        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value,
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value,
         // average & 98 percentile
-        TimerStatTrackType.AVG.value | TimerStatTrackType.PCTL_98.value,
+        SampleTrackType.AVG.value | SampleTrackType.PCTL_98.value,
         // 99 percentile & median
-        TimerStatTrackType.PCTL_99.value | TimerStatTrackType.MEDIAN.value,
+        SampleTrackType.PCTL_99.value | SampleTrackType.MEDIAN.value,
         // 95 percentile & 75 percentile
-        TimerStatTrackType.PCTL_95.value | TimerStatTrackType.PCTL_75.value,
+        SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_75.value,
         // min & max & average & 90 percentile
-        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value |
-        TimerStatTrackType.AVG.value | TimerStatTrackType.PCTL_90.value,
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value |
+        SampleTrackType.AVG.value | SampleTrackType.PCTL_90.value,
         // everything
-        TimerStatTrackType.MIN.value | TimerStatTrackType.MAX.value |
-        TimerStatTrackType.AVG.value | TimerStatTrackType.MEDIAN.value |
-        TimerStatTrackType.PCTL_75.value | TimerStatTrackType.PCTL_90.value |
-        TimerStatTrackType.PCTL_95.value | TimerStatTrackType.PCTL_98.value |
-        TimerStatTrackType.PCTL_99.value,
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value |
+        SampleTrackType.AVG.value | SampleTrackType.MEDIAN.value |
+        SampleTrackType.PCTL_75.value | SampleTrackType.PCTL_90.value |
+        SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_98.value |
+        SampleTrackType.PCTL_99.value,
         // nothing
         0,
     };
@@ -300,51 +301,45 @@ public class ClientTest {
 
       // number of counter updates is random between MAX_SAMPLES_COUNT +/- 500 to make
       // sure we cover cases that samples size is > and < MAX_SAMPLES_COUNT
-      int inputSize = (new Random()).nextInt(StatsMessage.MAX_SAMPLES_COUNT) + 500;
+      int inputSize = (new Random()).nextInt(SamplesMessage.MAX_SAMPLES_COUNT) + 500;
 
       int total = 0;
       for(int val=1; val <= inputSize; ++val) {
         // value is random
         int rndValue = (new Random()).nextInt(10000);
-        client.incrementTimer(key, rndValue, timerStatTypesToCheck[typeIdx]);
+        client.addSample(key, rndValue, timerStatTypesToCheck[typeIdx]);
         total += rndValue;
       }
 
       // get the samples for the stats for the given key
       @SuppressWarnings("unchecked")
-      ConcurrentHashMap<String,StatsMessage> clientStats = (ConcurrentHashMap<String,StatsMessage>)timerStats.get(client);
-      ArrayList<Integer> timerSamples = new ArrayList<Integer>(clientStats.get(key).getSamples());
-      Collections.copy(timerSamples, clientStats.get(key).getSamples());
-      Collections.sort(timerSamples);
+      ConcurrentHashMap<String, SamplesMessage> clientSamples = (ConcurrentHashMap<String,SamplesMessage>)sampleStats.get(client);
+      ArrayList<Integer> samples = new ArrayList<Integer>(clientSamples.get(key).getSamples());
+      Collections.copy(samples, clientSamples.get(key).getSamples());
+      Collections.sort(samples);
 
-      // trigger sendStats()
-      client.flushStats(true);
+      // trigger send()
+      client.flush(true);
 
-      // first check type/key/value for total value, it should be the values for
-      // "t0/k0/v0" keys in the event, timer is a counter type.
-      assertEquals(u.eventTypes.get("t0"), "counter");
-      assertEquals(u.eventKeys.get("k0"), key);
-      assertEquals(u.eventValues.get("v0").longValue(), total);
-
-      // now make sure the extra stat types specified are also set correctly
-      int idx = 1;
-      for(TimerStatTrackType trackType: TimerStatTrackType.values()) {
+      // make sure the extra stat types specified are also set correctly
+      int idx = 0;
+      for(SampleTrackType trackType: SampleTrackType.values()) {
         // check if a specific trackType is set for the test case, if so
         // check the emitter's maps
         if( (timerStatTypesToCheck[typeIdx] & trackType.value) ==
             trackType.value) {
-          // we check something like "t1=gauge", "k1=min_SomeKey_0", "v1=10",
-          // "t2=gauge", "k2=pctl_95_SomeKey_0", "v2=9500", all extra stats
+          // we check something like "t1=gauge", "k1=SomeKey_0_min", "v1=10",
+          // "t2=gauge", "k2=SomeKey_0_pctl_95", "v2=9500", all extra stats
           // are gauges
           assertEquals(u.eventTypes.get("t" + idx), "gauge");
-          assertEquals(u.eventKeys.get("k" + idx), trackType.keyPrefix + key);
+          assertEquals(u.eventKeys.get("k" + idx), key + trackType.keySuffix);
 
-          if(trackType.value == TimerStatTrackType.AVG.value) {
+          if(trackType.value == SampleTrackType.AVG.value) {
             assertEquals(u.eventValues.get("v" + idx).longValue(),
                 (long)(total/inputSize));
           } else {
             assertEquals(u.eventValues.get("v" + idx).longValue(),
-                timerSamples.get( (int) ( (Math.min(inputSize, StatsMessage.MAX_SAMPLES_COUNT)-1) *
+                samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
                     trackType.indexInSamples)).intValue()  );
           }
           idx++;
@@ -385,21 +380,21 @@ public class ClientTest {
       for(int cnt=0; cnt<Count; ++cnt) {
         client.increment("key_" + cnt, cnt);
       }
-      // create a bunch of timer counter stats
+      // create a bunch of samples
      for(int cnt=0; cnt<Count; ++cnt) {
-        client.incrementTimer("timerkey_" + cnt, cnt, TimerStatTrackType.AVG.value);
+        client.addSample("timerkey_" + cnt, cnt, SampleTrackType.AVG.value);
       }
       // now sleep for 1.2 sec to make sure auto emit kicks in
       Thread.sleep(1200);
 
-      // make sure Count*3 number of type/key/values are emitted, one for regular
-      // counter, one for timer counter, and one for avg value of the timer counter.
-      assertEquals(u.eventTypes.size(), Count*3);
-      assertEquals(u.eventKeys.size(), Count*3);
-      assertEquals(u.eventValues.size(), Count*3);
+      // make sure Count*2 number of type/key/values are emitted, one for regular
+      // counter,  and one for avg value of the samples.
+      assertEquals(u.eventTypes.size(), Count*2);
+      assertEquals(u.eventKeys.size(), Count*2);
+      assertEquals(u.eventValues.size(), Count*2);
 
       // now check the type/key/values in the emitter object
-      for(int idx=0; idx<Count*3; ++idx) {
+      for(int idx=0; idx<Count*2; ++idx) {
         assertNotNull(u.eventKeys.get("k" + idx));
         // extract the key
         String key = u.eventKeys.get("k" + idx);
@@ -409,13 +404,10 @@ public class ClientTest {
           assertEquals(u.eventTypes.get("t" + idx), "counter");
           val = Integer.parseInt(key.substring( "key_".length() ));
         } else if(key.startsWith("timerkey_")) {
-          // timer key
-          assertEquals(u.eventTypes.get("t" + idx), "counter");
-          val = Integer.parseInt(key.substring( "timerkey_".length() ));
-       } else if(key.startsWith("avg_timerkey_")) {
           // average for timer key
           assertEquals(u.eventTypes.get("t" + idx), "gauge");
-          val = Integer.parseInt(key.substring( "avg_timerkey_".length() ));
+          String s = key.substring( "timerkey_".length() );
+          val = Integer.parseInt(s.substring(0, s.indexOf("_avg")));
         } else {
           // should never happen.
           assertNotNull(null);
@@ -435,7 +427,7 @@ public class ClientTest {
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
         // the value for averages for timer counter should be 0 since average is a gauge
-        for(int idx=0; idx<Count*3; ++idx) {
+        for(int idx=0; idx<Count*2; ++idx) {
           assertNotNull(u.eventKeys.get("k" + idx));
           // extract the key
           String key = u.eventKeys.get("k" + idx);
@@ -445,10 +437,6 @@ public class ClientTest {
             assertEquals(u.eventTypes.get("t" + idx), "counter");
             val = Integer.parseInt(key.substring( "key_".length() ));
           } else if(key.startsWith("timerkey_")) {
-            // timer key
-            assertEquals(u.eventTypes.get("t" + idx), "counter");
-            val = Integer.parseInt(key.substring( "timerkey_".length() ));
-         } else if(key.startsWith("avg_timerkey_")) {
             // average for timer key, should be reset to 0
             assertEquals(u.eventTypes.get("t" + idx), "gauge");
             val = 0;
@@ -584,9 +572,8 @@ public class ClientTest {
   @Test
     public void testEmptyFlush() {
       client.flush();
-      client.flushStats();
       client.flushLogs();
-      client.flushStats(false);
+      client.flush(true);
     }
 
   @Test
@@ -598,7 +585,7 @@ public class ClientTest {
       c.increment(5);
       c.increment("testIncrement");
       c.increment("testIncrement2", 10);
-      c.flushStats(true);
+      c.flush(true);
       assertEquals(t.stats.length, 3);
     }
 
@@ -608,7 +595,7 @@ public class ClientTest {
       client.decrement(5);
       client.decrement("testDecrement");
       client.decrement("testDecrement2", 10);
-      client.flushStats(true);
+      client.flush(true);
       assertEquals(transport.stats.length, 3);
     }
 
@@ -616,7 +603,7 @@ public class ClientTest {
     public void testSetKey() {
       client.setKey("testSetKey", 123);
       client.setKey("testSetKeyLong", 123L);
-      client.flushStats();
+      client.flush();
       assertEquals(transport.stats.length, 2);
     }
 
@@ -669,21 +656,21 @@ public class ClientTest {
       client.flushLogs();
 
       client.setKey("a", 123);
-      client.flushStats();
+      client.flush();
 
       PrintStream currentError = System.err;
       System.setErr(null);
       client.log(Level.CRIT, null, "test", null);
       client.setKey("b", 2);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       System.setErr(currentError);
 
       client.finalize();
       client = null;
 
       t.sendLogs(null, null, null);
-      t.sendStats(null, null, null);
+      t.send(null, null, null, null);
 
       client = new Client("ClientTest");
       client.flushLogs();
@@ -732,17 +719,17 @@ public class ClientTest {
       client.setKey(StatType.Gauge, "anotherGauge", 566);
       client.setKey(StatType.Counter, "anotherCounter", 555);
       client.increment("yac",25);
-      client.flushStats();
+      client.flush();
 
       client.setNoSendLevel(Level.INFO);
       client.log("testTraceId", 555, Level.DEBUG, new TraceId(3117), "did it trace?",null);
 
       t.sendLogs(null, null, null);
-      t.sendStats(null,null, null);
+      t.send(null, null, null, null);
       t.shutdown();
 
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       t.shutdown();
     }
 
@@ -801,17 +788,17 @@ public class ClientTest {
 
       contexts.set(client, null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.getContextKeys();
 
       stats.set(client,null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.setKey(null, 1);
 
       transports.set(client, null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.addTransport(null);
 
       messages.set(client, null);
@@ -913,6 +900,7 @@ public class ClientTest {
   {
     public LogMessage[] logs = new LogMessage[0];
     public StatsMessage[] stats = new StatsMessage[0];
+    public SamplesMessage[] samples = new SamplesMessage[0];
     public TraceId traceId = null;
 
     @Override
@@ -930,13 +918,17 @@ public class ClientTest {
     }
 
     @Override
-    public void sendStats (String programId,
-                           StatsMessage[] messages,
-                           Context[] contexts)
-    {
+    public void send (String programId,
+        StatsMessage[] messages,
+        SamplesMessage[] samples,
+        Context[] contexts) {
       stats = new StatsMessage[messages.length];
       for(int i=0; i<stats.length; ++i) {
         stats[i] = messages[i];
+      }
+      this.samples = new SamplesMessage[samples.length];
+      for(int i=0; i<this.samples.length; ++i) {
+        this.samples[i] = samples[i];
       }
     }
 
@@ -966,10 +958,10 @@ public class ClientTest {
     }
 
     @Override
-    public void sendStats (String programId,
-                           StatsMessage[] messages,
-                           Context[] contexts)
-      throws TransportException
+    public void send (String programId,
+        StatsMessage[] messages,
+        SamplesMessage[] samples,
+        Context[] contexts) throws TransportException
     {
       throw new TransportException("BogusTransport");
     }

@@ -25,38 +25,14 @@ public class StatsMessage implements Serializable {
   private StatType type = StatType.Unknown;
   private long counter = 0;
 
-  // the following attributes are used for timer counters where we may want to
-  // keep more stats like min/max/98 percentile/....
-  private ArrayList<Integer> samples = null;          // a sample of entries for timer counter
-  public static final int MAX_SAMPLES_COUNT = 1000;   // default max number of sample entries to keep
-  private int samplesMaxCount;          // max number of sample entries to keep
-  private long timerCounter = 0;        // counter for timers, we need a separate
-                                        // counter since timer stats are gauge.
-  private int timerUpdateCounts = 0;    // number of times counter is updated
-  private int trackingTypeValue = 0;    // bitwise value to specify what extra
-                                        // stats to keep for a timer counter
-  Random rand = new Random();
-
   /**
    * constructor
    * @param key - counter's key
    * @param type - counter's type
-   * @param trackingTypeValue - bitwise value, specifies what extra stats
-   *        (min/max/...) should be kept for a timer counter, ignored for
-   *        non-timer counters.
-   * @param samplesMaxCount - maximum number of samples to keep, ignored if
-   *        less than or equal to 0.
    */
-  public StatsMessage(String key, StatType type, int trackingTypeValue,
-      int samplesMaxCount) {
+  public StatsMessage(String key, StatType type) {
     this.key = key;
     this.type = type;
-    // tracking type value, samplesMaxCount and samples are only applicable to timer counters
-    if(type == StatType.Timer) {
-      this.trackingTypeValue = trackingTypeValue;
-      this.samplesMaxCount = (samplesMaxCount <= 0 ? MAX_SAMPLES_COUNT : samplesMaxCount);
-      samples = new ArrayList<Integer>(this.samplesMaxCount);
-    }
   }
 
   /**
@@ -82,34 +58,6 @@ public class StatsMessage implements Serializable {
   }
 
   /**
-   * @return the tracking type value for the counter, 0 for non timer type counters
-   */
-  public int getTrackingTypeValue() {
-    return trackingTypeValue;
-  }
-
-  /**
-   * @return samples for timer counters
-   */
-  public ArrayList<Integer> getSamples() {
-    return samples;
-  }
-
-  /**
-   * @return number of times this counter has been updated since last emission.
-   */
-  public int getTimerUpdateCounts() {
-    return timerUpdateCounts;
-  }
-
-  /**
-   * @return counter for a timer stat since last emission
-   */
-  public long getTimerCounter() {
-    return timerCounter;
-  }
-
-  /**
    * increments the counter by some value, replaces setCounter()
    * @param value - value to increment by
    */
@@ -118,34 +66,6 @@ public class StatsMessage implements Serializable {
     // thread is sending this instance's stats
     synchronized(this) {
       counter += value;
-      // update samples for timer counters
-      if(type == StatType.Timer) {
-        timerCounter += value;
-        timerUpdateCounts++;
-        if(samples.size() < samplesMaxCount) {
-          // add new value to samples if it has space
-          samples.add(value);
-        } else {
-          // otherwise, replace one of the entries with the new value
-          // with the probability of "samplesCount / timerUpdateCounts"
-          int indexToReplace = rand.nextInt(timerUpdateCounts);   // from 0 to timerUpdateCounts-1
-          if( indexToReplace < samplesMaxCount) {
-            samples.set(indexToReplace, value);
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * reset the timer-stat specific attributes of this object.
-   * this method is called after emission of a timer stat
-   */
-  public void resetSamples() {
-    if(type == StatType.Timer) {
-      samples.clear();
-      timerCounter = 0;
-      timerUpdateCounts = 0;
     }
   }
 
@@ -154,13 +74,6 @@ public class StatsMessage implements Serializable {
    */
   public void setCounter(long counter) {
     this.counter = counter;
-  }
-
-  /**
-   * @return the maximum number of samples we keep for this object
-   */
-  public int getSamplesMaxCount() {
-    return samplesMaxCount;
   }
 
   /**
