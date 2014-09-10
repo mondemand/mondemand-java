@@ -20,7 +20,7 @@ public class SamplesMessage implements Serializable  {
   private long counter = 0;             // counter since stats are emitted.
   private int updateCounts = 0;         // number of times the object is updated
   private int trackingTypeValue = 0;    // bitwise value to specify what extra
-                                        // stats to keep for a timer counter
+                                        // stats to keep for a sample counter
   Random rand = new Random();
 
   /**
@@ -63,8 +63,8 @@ public class SamplesMessage implements Serializable  {
         samples.add(value);
       } else {
         // otherwise, replace one of the entries with the new value
-        // with the probability of "samplesCount / timerUpdateCounts"
-        int indexToReplace = rand.nextInt(updateCounts);   // from 0 to timerUpdateCounts-1
+        // with the probability of "samplesCount / UpdateCounts"
+        int indexToReplace = rand.nextInt(updateCounts);   // from 0 to UpdateCounts-1
         if( indexToReplace < samplesMaxCount) {
           samples.set(indexToReplace, value);
         }

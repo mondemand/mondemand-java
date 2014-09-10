@@ -13,7 +13,7 @@ public enum SampleTrackType {
   PCTL_99 (1 << 8, "_pctl_99", 0.99);
 
   public final int      value;          // bitwise value for the enum
-  public final String   keySuffix;      // prefix added to the stat's key
+  public final String   keySuffix;      // suffix added to the stat's key
   public final double   indexInSamples; // index of the given enum in the
                                         // stat's samples
 

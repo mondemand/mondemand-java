@@ -13,8 +13,6 @@
 package org.mondemand;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Random;
 
 import org.mondemand.StatType;
 

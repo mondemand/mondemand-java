@@ -20,7 +20,6 @@ import org.mondemand.Level;
 import org.mondemand.LogMessage;
 import org.mondemand.SampleTrackType;
 import org.mondemand.SamplesMessage;
-import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
 import org.mondemand.Transport;
 
