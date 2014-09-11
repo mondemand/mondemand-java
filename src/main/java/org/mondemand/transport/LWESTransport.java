@@ -288,9 +288,13 @@ public class LWESTransport
           // default value (in case samples were not updated since last emit)
           long value = 0;
           if(sortedSamples.size() > 0) {
+            // values for average, sum and count are not coming from sortedSamples
             if(trackType.value == SampleTrackType.AVG.value) {
-              // value for average is not coming from sortedSamples
               value = msg.getCounter()/msg.getUpdateCounts();
+            } else if(trackType.value == SampleTrackType.SUM.value) {
+              value = msg.getCounter();
+            } else if(trackType.value == SampleTrackType.COUNT.value) {
+              value = msg.getUpdateCounts();
             } else {
               value = sortedSamples.get((int)( (sortedSamples.size() - 1) * trackType.indexInSamples));
             }
@@ -298,7 +302,7 @@ public class LWESTransport
             // samples were not updated, i.e., no increment since the last
             // emit, so send a value of 0
           }
-          // "min_", "max_", ... will be added to the original key
+          // "_min", "_max", ... will be added to the original key
           // all these stats are gauges.
           setLwesEvent(event, StatType.Gauge.toString(),
                 msg.getKey() + trackType.keySuffix, value, index);

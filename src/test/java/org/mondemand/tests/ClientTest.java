@@ -280,6 +280,8 @@ public class ClientTest {
         SampleTrackType.PCTL_95.value,
         SampleTrackType.PCTL_98.value,
         SampleTrackType.PCTL_99.value,
+        SampleTrackType.SUM.value,
+        SampleTrackType.COUNT.value,
         // min & max
         SampleTrackType.MIN.value | SampleTrackType.MAX.value,
         // average & 98 percentile
@@ -288,6 +290,9 @@ public class ClientTest {
         SampleTrackType.PCTL_99.value | SampleTrackType.MEDIAN.value,
         // 95 percentile & 75 percentile
         SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_75.value,
+        // 98 percentile & sum and count
+        SampleTrackType.PCTL_98.value | SampleTrackType.SUM.value |
+        SampleTrackType.COUNT.value,
         // min & max & average & 90 percentile
         SampleTrackType.MIN.value | SampleTrackType.MAX.value |
         SampleTrackType.AVG.value | SampleTrackType.PCTL_90.value,
@@ -296,7 +301,8 @@ public class ClientTest {
         SampleTrackType.AVG.value | SampleTrackType.MEDIAN.value |
         SampleTrackType.PCTL_75.value | SampleTrackType.PCTL_90.value |
         SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_98.value |
-        SampleTrackType.PCTL_99.value,
+        SampleTrackType.PCTL_99.value | SampleTrackType.SUM.value |
+        SampleTrackType.COUNT.value,
         // nothing
         0,
     };
@@ -342,6 +348,10 @@ public class ClientTest {
           if(trackType.value == SampleTrackType.AVG.value) {
             assertEquals(u.eventValues.get("v" + idx).longValue(),
                 (long)(total/inputSize));
+          } else if(trackType.value == SampleTrackType.SUM.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(), total);
+          } else if(trackType.value == SampleTrackType.COUNT.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(), inputSize);
           } else {
             assertEquals(u.eventValues.get("v" + idx).longValue(),
                 samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *

@@ -10,7 +10,9 @@ public enum SampleTrackType {
   PCTL_90 (1 << 5, "_pctl_90", 0.90),
   PCTL_95 (1 << 6, "_pctl_95", 0.95),
   PCTL_98 (1 << 7, "_pctl_98", 0.98),
-  PCTL_99 (1 << 8, "_pctl_99", 0.99);
+  PCTL_99 (1 << 8, "_pctl_99", 0.99),
+  SUM     (1 << 9, "_sum", 0),    // indexInSamples for sum is not applicable
+  COUNT   (1 << 10, "_count", 0); // indexInSamples for count is not applicable
 
   public final int      value;          // bitwise value for the enum
   public final String   keySuffix;      // suffix added to the stat's key
