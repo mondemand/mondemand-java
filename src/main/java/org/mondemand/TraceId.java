@@ -15,6 +15,8 @@ package org.mondemand;
 import java.io.Serializable;
 
 public class TraceId implements Serializable, Comparable<TraceId> {
+  private static final long serialVersionUID = 3884862923885163227L;
+
   public final static TraceId NULL_TRACE_ID = new TraceId(0);
 
   /* the internal ID */
@@ -39,7 +41,7 @@ public class TraceId implements Serializable, Comparable<TraceId> {
 
   /**
    * Accessor which returns the identifier for this trace id
-   * 
+   *
    * @return the id as a long
    */
   public long getId() {
@@ -48,7 +50,7 @@ public class TraceId implements Serializable, Comparable<TraceId> {
 
   /**
    * Mutator which allows the identifier to be overwritten
-   * 
+   *
    * @param newId the new identifier for this trace id
    */
   public void setId(long newId) {
@@ -68,7 +70,7 @@ public class TraceId implements Serializable, Comparable<TraceId> {
       return -1;
     } else if (this.id > t1) {
       return 1;
-    } 
+    }
 
     return 0;
   }

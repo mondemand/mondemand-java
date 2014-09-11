@@ -13,6 +13,7 @@ public class StatsMessageTest {
   /**
    * this tests counter and gauge StatMessage types.
    */
+  @SuppressWarnings("deprecation")
   @Test
   public void testCounterGaugeStats() {
     Random rnd = new Random();

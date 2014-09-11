@@ -65,7 +65,7 @@ import org.mondemand.util.ClassUtils;
 
 public class ClientTest {
 
-  // stub unitcast emitter for LwesTransport
+  // stub unicast emitter for LwesTransport
   class StubUnicastEventEmitter extends UnicastEventEmitter {
 
     public Map<String, String> eventTypes = new HashMap<String, String>();
@@ -249,7 +249,7 @@ public class ClientTest {
   /**
    * create a client with a stub emitter, where we could inspect the entries
    * in the lwes that would be emitted (in real world). Then for a set of random
-   * timer stat type (which covers all individual types and some combinations),
+   * sample types (which covers all individual types and some combinations),
    * generate a set of random numbers to be added to some random keys, and finally
    * make sure that the desired stat types and their values are in the lwes
    * event, and there is no extras in the event.
@@ -257,7 +257,7 @@ public class ClientTest {
   @Test
   public void testSamplesMessages() throws Exception {
     // create a client, with a transport's emitter that has the emit() stubbed out
-    Client client = new Client("ClientTestTimer");
+    Client client = new Client("ClientTestSample");
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
     client.addTransport(localLwesTransport);
     Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
@@ -269,8 +269,8 @@ public class ClientTest {
     Field sampleStats = client.getClass().getDeclaredField("samples");
     sampleStats.setAccessible(true);
 
-    // timer stat types to check, contains all individual types and some combinations
-    int[] timerStatTypesToCheck = new int[]{
+    // sample types to check, contains all individual types and some combinations
+    int[] sampleStatTypesToCheck = new int[]{
         SampleTrackType.MIN.value,
         SampleTrackType.MAX.value,
         SampleTrackType.AVG.value,
@@ -301,7 +301,7 @@ public class ClientTest {
         0,
     };
 
-    for(int typeIdx=0; typeIdx<timerStatTypesToCheck.length; ++typeIdx) {
+    for(int typeIdx=0; typeIdx<sampleStatTypesToCheck.length; ++typeIdx) {
       String key = "SomeKey_" + typeIdx;
 
       // number of counter updates is random between MAX_SAMPLES_COUNT +/- 500 to make
@@ -312,7 +312,7 @@ public class ClientTest {
       for(int val=1; val <= inputSize; ++val) {
         // value is random
         int rndValue = (new Random()).nextInt(10000);
-        client.addSample(key, rndValue, timerStatTypesToCheck[typeIdx]);
+        client.addSample(key, rndValue, sampleStatTypesToCheck[typeIdx]);
         total += rndValue;
       }
 
@@ -331,7 +331,7 @@ public class ClientTest {
       for(SampleTrackType trackType: SampleTrackType.values()) {
         // check if a specific trackType is set for the test case, if so
         // check the emitter's maps
-        if( (timerStatTypesToCheck[typeIdx] & trackType.value) ==
+        if( (sampleStatTypesToCheck[typeIdx] & trackType.value) ==
             trackType.value) {
           // we check something like "t1=gauge", "k1=SomeKey_0_min", "v1=10",
           // "t2=gauge", "k2=SomeKey_0_pctl_95", "v2=9500", all extra stats
@@ -370,7 +370,7 @@ public class ClientTest {
     // auto emit once every second
     boolean[] keepOrDropStats = new boolean[]{true, false};
     for(int kods = 0; kods < keepOrDropStats.length; kods++) {
-      Client client = new Client("ClientTestTimer", true, keepOrDropStats[kods], 1);
+      Client client = new Client("ClientTestSample", true, keepOrDropStats[kods], 1);
       LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
       client.addTransport(localLwesTransport);
       Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
@@ -387,7 +387,7 @@ public class ClientTest {
       }
       // create a bunch of samples
      for(int cnt=0; cnt<Count; ++cnt) {
-        client.addSample("timerkey_" + cnt, cnt, SampleTrackType.AVG.value);
+        client.addSample("samplekey_" + cnt, cnt, SampleTrackType.AVG.value);
       }
       // now sleep for 1.2 sec to make sure auto emit kicks in
       Thread.sleep(1200);
@@ -408,10 +408,10 @@ public class ClientTest {
           // regular key
           assertEquals(u.eventTypes.get("t" + idx), "counter");
           val = Integer.parseInt(key.substring( "key_".length() ));
-        } else if(key.startsWith("timerkey_")) {
-          // average for timer key
+        } else if(key.startsWith("samplekey_")) {
+          // average for sample key
           assertEquals(u.eventTypes.get("t" + idx), "gauge");
-          String s = key.substring( "timerkey_".length() );
+          String s = key.substring( "samplekey_".length() );
           val = Integer.parseInt(s.substring(0, s.indexOf("_avg")));
         } else {
           // should never happen.
@@ -431,7 +431,7 @@ public class ClientTest {
         assertEquals(u.eventValues.size(), 0);
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
-        // the value for averages for timer counter should be 0 since average is a gauge
+        // the value for averages for sample counter should be 0 since average is a gauge
         for(int idx=0; idx<Count*2; ++idx) {
           assertNotNull(u.eventKeys.get("k" + idx));
           // extract the key
@@ -441,8 +441,8 @@ public class ClientTest {
             // regular key
             assertEquals(u.eventTypes.get("t" + idx), "counter");
             val = Integer.parseInt(key.substring( "key_".length() ));
-          } else if(key.startsWith("timerkey_")) {
-            // average for timer key, should be reset to 0
+          } else if(key.startsWith("samplekey_")) {
+            // average for sample key, should be reset to 0
             assertEquals(u.eventTypes.get("t" + idx), "gauge");
             val = 0;
           } else {
@@ -463,7 +463,7 @@ public class ClientTest {
    */
   @Test
   public void testClientAddTransportFromFile() {
-    Client client = new Client("ClientTestTimer");
+    Client client = new Client("ClientTestSample");
     File mondemandConfigFile = null;
     FileOutputStream output = null;
     try {

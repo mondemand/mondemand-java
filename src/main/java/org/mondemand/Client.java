@@ -44,7 +44,7 @@ public class Client {
   private static final String CONFIG_FILE  = "/etc/mondemand/mondemand.conf";
   private static final int    EMIT_INTERVAL = 60;   // 60 seconds
   private static final boolean DEFAULT_AUTO_EMIT = false;   // auto emit disabled by default
-  private static final boolean DEFAULT_STAT_CLEAR = false;  // clear stats after flush by auto emit
+  private static final boolean DEFAULT_CLEAR_STAT = false;  // clear stats after flush by auto emit
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -169,7 +169,7 @@ public class Client {
    * @param autoStatEmit specifies if auto stat emit is enabled
    */
   public Client(String programId, boolean autoStatEmit) {
-    this(programId, autoStatEmit, DEFAULT_STAT_CLEAR, EMIT_INTERVAL);
+    this(programId, autoStatEmit, DEFAULT_CLEAR_STAT, EMIT_INTERVAL);
   }
 
   /**
@@ -179,7 +179,7 @@ public class Client {
    * @param programId a string identifying the program that is calling MonDemand
    */
   public Client (String programId) {
-    this(programId, DEFAULT_AUTO_EMIT, DEFAULT_STAT_CLEAR, EMIT_INTERVAL);
+    this(programId, DEFAULT_AUTO_EMIT, DEFAULT_CLEAR_STAT, EMIT_INTERVAL);
   }
 
   /**
@@ -466,11 +466,13 @@ public class Client {
   public void flush(boolean resetStats) {
     flushLogs();
     dispatchStatsSamples();
-    if(resetStats && stats != null) {
-      stats.clear();
-    }
-    if(resetStats && samples != null) {
-      samples.clear();
+    if(resetStats) {
+      if(stats != null) {
+        stats.clear();
+      }
+      if(samples != null) {
+        samples.clear();
+      }
     }
   }
 

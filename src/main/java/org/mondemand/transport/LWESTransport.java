@@ -170,11 +170,12 @@ public class LWESTransport
     Event event = emitter.createEvent(STATS_EVENT, false);
     event.setString("prog_id", programId);
 
-    int idx=0;
+    // keeps the number of attributes that are being added to the event when
+    // setting stats and samples in the event (excluding contexts)
+    int idx = 0;
     idx = sendStats(event, stats, contexts, idx);
     idx = sendSamples(event, samples, idx);
 
-    // number of entries in the event is the total of stats and samples
     event.setUInt16("num", idx);
 
     // finally emit the event
@@ -227,7 +228,6 @@ public class LWESTransport
    * sends all the samples
    * @param event - event to set the samples in
    * @param messages - samples
-   * @param contexts - contexts
    * @param idx - beginning index for the entries in the event
    * @return index of last entry added to the event
    */
@@ -242,8 +242,8 @@ public class LWESTransport
       synchronized(msg) {
         // synchronize on msg to make sure some other threads are not updating it
         // at the same time, otherwise there may be exception during sorting
-        // add messages for extra stats for timer stat
-        idx = updateLwesEventForTimers(event, msg, idx);
+        // add messages for extra stats for samples
+        idx = updateLwesEventForSamples(event, msg, idx);
       }
     }
 
@@ -253,28 +253,28 @@ public class LWESTransport
 
   /**
    * sets a type/key/value in an lwes event object's message part
-   * @param statsMsg - the lwes event object
+   * @param event - the lwes event object
    * @param type - the event's type
    * @param key - the event's key
    * @param value - the event's value
    * @param index - the index used for the type/key/value
    */
-  protected void setLwesEvent(Event statsMsg, String type, String key, long value,
+  protected void setLwesEvent(Event event, String type, String key, long value,
       int index) {
-    statsMsg.setString("t" + index, type);
-    statsMsg.setString("k" + index, key);
-    statsMsg.setInt64("v" + index, value);
+    event.setString("t" + index, type);
+    event.setString("k" + index, key);
+    event.setInt64("v" + index, value);
   }
 
   /**
-   * update an lwes event with the extra stats (min/max/...) for a timer stat.
+   * update an lwes event with the extra stats (min/max/...) for a sample message.
    *
-   * @param statsMsg - the lwes event to be updated
+   * @param event - the lwes event to be updated
    * @param msg - the StatsMessage object to update the event
    * @param index - the index to be incremented and used to lwes event
    * @return the last index that was added in this method.
    */
-  protected int updateLwesEventForTimers(Event event, SamplesMessage msg,
+  protected int updateLwesEventForSamples(Event event, SamplesMessage msg,
       int index) {
     // already synchronized on msg in the calling method
     if(msg.getTrackingTypeValue() > 0) {
@@ -306,7 +306,7 @@ public class LWESTransport
         }
       }
     }
-    // clear the samples, and counters for samples messages
+    // clear the samples in the sampleMessage
     msg.resetSamples();
     return index;
   }

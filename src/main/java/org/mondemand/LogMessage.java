@@ -15,6 +15,7 @@ package org.mondemand;
 import java.io.Serializable;
 
 public class LogMessage implements Serializable {
+  private static final long serialVersionUID = -6485010015100206281L;
   private String filename = null;
   private int line = 0;
   private int level = Level.DEBUG;
