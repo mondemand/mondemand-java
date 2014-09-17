@@ -17,9 +17,10 @@ public interface Transport {
                         LogMessage[] messages,
                         Context[] contexts)
     throws TransportException;
-  public void sendStats (String programId,
-                         StatsMessage[] messages,
-                         Context[] contexts)
+  public void send (String programId,
+                    StatsMessage[] stats,
+                    SamplesMessage[] samples,
+                    Context[] contexts)
     throws TransportException;
   public void sendTrace (String programId,
                          Context[] contexts)

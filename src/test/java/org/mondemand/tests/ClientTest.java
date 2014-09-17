@@ -16,15 +16,24 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
+import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
 import org.apache.log4j.spi.LocationInfo;
@@ -32,13 +41,20 @@ import org.apache.log4j.spi.LoggingEvent;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.lwes.Event;
+import org.lwes.EventSystemException;
+import org.lwes.MapEvent;
+import org.lwes.emitter.MulticastEventEmitter;
+import org.lwes.emitter.UnicastEventEmitter;
 import org.mondemand.Client;
 import org.mondemand.Context;
 import org.mondemand.ErrorHandler;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
+import org.mondemand.SamplesMessage;
 import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
+import org.mondemand.SampleTrackType;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
@@ -48,6 +64,44 @@ import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
 
 public class ClientTest {
+
+  // stub unicast emitter for LwesTransport
+  class StubUnicastEventEmitter extends UnicastEventEmitter {
+
+    public Map<String, String> eventTypes = new HashMap<String, String>();
+    public Map<String, String> eventKeys = new HashMap<String, String>();
+    public Map<String, Long> eventValues = new HashMap<String, Long>();
+
+    /**
+     * during emit, all we do is to capture the type/key/values we put in the
+     * event to make sure the right key/values are put in the event, and nothing
+     * extra is there. it populates 3 maps with the types/keys/values.
+     *
+     * @param event - the lwes event to be inspected
+     */
+    @Override
+    public void emit(Event event) throws IOException, EventSystemException {
+      // go through the event and populate the maps with the entries in the event
+      // that start with "t", "k" or "v"
+      MapEvent me = (MapEvent)event;
+      for(String key : me.getEventAttributes()) {
+        if(key.startsWith("t")) {
+          eventTypes.put(key, me.getString(key));
+        } else if (key.startsWith("k")) {
+          eventKeys.put(key, me.getString(key));
+        } else if (key.startsWith("v")) {
+          eventValues.put(key, me.getInt64(key));
+        }
+      }
+    }
+
+    public void clearMaps() {
+      eventTypes.clear();
+      eventKeys.clear();
+      eventValues.clear();
+    }
+  }
+
   private static Client client = new Client("ClientTest");
   private static boolean transportIsSet = false;
   private static ClientTestTransport transport;
@@ -192,12 +246,349 @@ public class ClientTest {
       assertNull(client.getContext("key1"));
     }
 
+  /**
+   * create a client with a stub emitter, where we could inspect the entries
+   * in the lwes that would be emitted (in real world). Then for a set of random
+   * sample types (which covers all individual types and some combinations),
+   * generate a set of random numbers to be added to some random keys, and finally
+   * make sure that the desired stat types and their values are in the lwes
+   * event, and there is no extras in the event.
+   */
+  @Test
+  public void testSamplesMessages() throws Exception {
+    // create a client, with a transport's emitter that has the emit() stubbed out
+    Client client = new Client("ClientTestSample");
+    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
+    emitter.setAccessible(true);
+    StubUnicastEventEmitter u = new StubUnicastEventEmitter();
+    u.setAddress(InetAddress.getLocalHost());
+    u.setPort(9292);
+    emitter.set(localLwesTransport, u);
+    Field sampleStats = client.getClass().getDeclaredField("samples");
+    sampleStats.setAccessible(true);
+
+    // sample types to check, contains all individual types and some combinations
+    int[] sampleStatTypesToCheck = new int[]{
+        SampleTrackType.MIN.value,
+        SampleTrackType.MAX.value,
+        SampleTrackType.AVG.value,
+        SampleTrackType.MEDIAN.value,
+        SampleTrackType.PCTL_75.value,
+        SampleTrackType.PCTL_90.value,
+        SampleTrackType.PCTL_95.value,
+        SampleTrackType.PCTL_98.value,
+        SampleTrackType.PCTL_99.value,
+        SampleTrackType.SUM.value,
+        SampleTrackType.COUNT.value,
+        // min & max
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value,
+        // average & 98 percentile
+        SampleTrackType.AVG.value | SampleTrackType.PCTL_98.value,
+        // 99 percentile & median
+        SampleTrackType.PCTL_99.value | SampleTrackType.MEDIAN.value,
+        // 95 percentile & 75 percentile
+        SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_75.value,
+        // 98 percentile & sum and count
+        SampleTrackType.PCTL_98.value | SampleTrackType.SUM.value |
+        SampleTrackType.COUNT.value,
+        // min & max & average & 90 percentile
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value |
+        SampleTrackType.AVG.value | SampleTrackType.PCTL_90.value,
+        // everything
+        SampleTrackType.MIN.value | SampleTrackType.MAX.value |
+        SampleTrackType.AVG.value | SampleTrackType.MEDIAN.value |
+        SampleTrackType.PCTL_75.value | SampleTrackType.PCTL_90.value |
+        SampleTrackType.PCTL_95.value | SampleTrackType.PCTL_98.value |
+        SampleTrackType.PCTL_99.value | SampleTrackType.SUM.value |
+        SampleTrackType.COUNT.value,
+        // nothing
+        0,
+    };
+
+    for(int typeIdx=0; typeIdx<sampleStatTypesToCheck.length; ++typeIdx) {
+      String key = "SomeKey_" + typeIdx;
+
+      // number of counter updates is random between MAX_SAMPLES_COUNT +/- 500 to make
+      // sure we cover cases that samples size is > and < MAX_SAMPLES_COUNT
+      int inputSize = (new Random()).nextInt(SamplesMessage.MAX_SAMPLES_COUNT) + 500;
+
+      int total = 0;
+      for(int val=1; val <= inputSize; ++val) {
+        // value is random
+        int rndValue = (new Random()).nextInt(10000);
+        client.addSample(key, rndValue, sampleStatTypesToCheck[typeIdx]);
+        total += rndValue;
+      }
+
+      // get the samples for the stats for the given key
+      @SuppressWarnings("unchecked")
+      ConcurrentHashMap<String, SamplesMessage> clientSamples = (ConcurrentHashMap<String,SamplesMessage>)sampleStats.get(client);
+      ArrayList<Integer> samples = new ArrayList<Integer>(clientSamples.get(key).getSamples());
+      Collections.copy(samples, clientSamples.get(key).getSamples());
+      Collections.sort(samples);
+
+      // trigger send()
+      client.flush(true);
+
+      // make sure the extra stat types specified are also set correctly
+      int idx = 0;
+      for(SampleTrackType trackType: SampleTrackType.values()) {
+        // check if a specific trackType is set for the test case, if so
+        // check the emitter's maps
+        if( (sampleStatTypesToCheck[typeIdx] & trackType.value) ==
+            trackType.value) {
+          // we check something like "t1=gauge", "k1=SomeKey_0_min", "v1=10",
+          // "t2=gauge", "k2=SomeKey_0_pctl_95", "v2=9500", all extra stats
+          // are gauges
+          assertEquals(u.eventTypes.get("t" + idx), "gauge");
+          assertEquals(u.eventKeys.get("k" + idx), key + trackType.keySuffix);
+
+          if(trackType.value == SampleTrackType.AVG.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(),
+                (long)(total/inputSize));
+          } else if(trackType.value == SampleTrackType.SUM.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(), total);
+          } else if(trackType.value == SampleTrackType.COUNT.value) {
+            assertEquals(u.eventValues.get("v" + idx).longValue(), inputSize);
+          } else {
+            assertEquals(u.eventValues.get("v" + idx).longValue(),
+                samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
+                    trackType.indexInSamples)).intValue()  );
+          }
+          idx++;
+        }
+      }
+      // finally make sure no other key/value/types are set.
+      assertNull(u.eventTypes.get("t" + idx));
+      assertNull(u.eventKeys.get("t" + idx));
+      assertNull(u.eventValues.get("t" + idx));
+
+      // reset emitter
+      u.clearMaps();
+    }
+    client.finalize();
+  }
+
+  /**
+   * this will test the auto amit feature in the client, one time
+   * with reseting the stats after each emit and one time with keeping the stats
+   */
+  @Test
+  public void testAutoEmitter() throws Exception  {
+    // auto emit once every second
+    boolean[] keepOrDropStats = new boolean[]{true, false};
+    for(int kods = 0; kods < keepOrDropStats.length; kods++) {
+      Client client = new Client("ClientTestSample", true, keepOrDropStats[kods], 1);
+      LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+      client.addTransport(localLwesTransport);
+      Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
+      emitter.setAccessible(true);
+      StubUnicastEventEmitter u = new StubUnicastEventEmitter();
+      u.setAddress(InetAddress.getLocalHost());
+      u.setPort(9292);
+      emitter.set(localLwesTransport, u);
+
+      // create a bunch of regular counter stats
+      int Count = 100;
+      for(int cnt=0; cnt<Count; ++cnt) {
+        client.increment("key_" + cnt, cnt);
+      }
+      // create a bunch of samples
+     for(int cnt=0; cnt<Count; ++cnt) {
+        client.addSample("samplekey_" + cnt, cnt, SampleTrackType.AVG.value);
+      }
+      // now sleep for 1.2 sec to make sure auto emit kicks in
+      Thread.sleep(1200);
+
+      // make sure Count*2 number of type/key/values are emitted, one for regular
+      // counter,  and one for avg value of the samples.
+      assertEquals(u.eventTypes.size(), Count*2);
+      assertEquals(u.eventKeys.size(), Count*2);
+      assertEquals(u.eventValues.size(), Count*2);
+
+      // now check the type/key/values in the emitter object
+      for(int idx=0; idx<Count*2; ++idx) {
+        assertNotNull(u.eventKeys.get("k" + idx));
+        // extract the key
+        String key = u.eventKeys.get("k" + idx);
+        int val = 0;
+        if(key.startsWith("key_")) {
+          // regular key
+          assertEquals(u.eventTypes.get("t" + idx), "counter");
+          val = Integer.parseInt(key.substring( "key_".length() ));
+        } else if(key.startsWith("samplekey_")) {
+          // average for sample key
+          assertEquals(u.eventTypes.get("t" + idx), "gauge");
+          String s = key.substring( "samplekey_".length() );
+          val = Integer.parseInt(s.substring(0, s.indexOf("_avg")));
+        } else {
+          // should never happen.
+          assertNotNull(null);
+        }
+        assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+      }
+
+      u.clearMaps();
+
+      // now sleep for 1.2 sec without emiting anything
+      Thread.sleep(1200);
+      if(keepOrDropStats[kods]) {
+        // we are reseting all stats, there should not be anything emitted
+        assertEquals(u.eventTypes.size(), 0);
+        assertEquals(u.eventKeys.size(), 0);
+        assertEquals(u.eventValues.size(), 0);
+      } else {
+        // we are not reseting the stats, the same keys with the same values should be emitted
+        // the value for averages for sample counter should be 0 since average is a gauge
+        for(int idx=0; idx<Count*2; ++idx) {
+          assertNotNull(u.eventKeys.get("k" + idx));
+          // extract the key
+          String key = u.eventKeys.get("k" + idx);
+          int val = 0;
+          if(key.startsWith("key_")) {
+            // regular key
+            assertEquals(u.eventTypes.get("t" + idx), "counter");
+            val = Integer.parseInt(key.substring( "key_".length() ));
+          } else if(key.startsWith("samplekey_")) {
+            // average for sample key, should be reset to 0
+            assertEquals(u.eventTypes.get("t" + idx), "gauge");
+            val = 0;
+          } else {
+            // should never happen.
+            assertNotNull(null);
+          }
+          assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+        }
+      }
+
+      client.finalize();
+    }
+  }
+
+  /**
+   * this will test the addTransportsFromConfigFile method where we get the
+   * mondemand address from a file.
+   */
+  @Test
+  public void testClientAddTransportFromFile() {
+    Client client = new Client("ClientTestSample");
+    File mondemandConfigFile = null;
+    FileOutputStream output = null;
+    try {
+      // non-exisitng config file
+      String nonExistingFileName = "non_existing_file" + (new Random()).nextInt();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(nonExistingFileName);
+        assertTrue(false);
+      } catch(Exception e) {}
+
+      // missing host
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_PORT=\"3344\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // missing port
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // bad port
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"\nMONDEMAND_PORT=\"dds\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // invalid host
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"450.1.2.3\"\nMONDEMAND_PORT=\"1234\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // everything valid
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      Vector<String> addresses = new Vector<String>();
+      addresses.add("127.0.0.1");
+      addresses.add("127.0.0.2");
+      addresses.add("224.1.2.200");
+      StringBuilder allAddresses = new StringBuilder();
+      for(String addr: addresses) {
+        allAddresses.append(", ").append(addr);
+      }
+      output.write( ("MONDEMAND_ADDR=\"" + allAddresses.toString().substring(1)
+          + "\"\nMONDEMAND_PORT=\"1234\"") .getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        // verify transports
+        Field transports = client.getClass().getDeclaredField("transports");
+        transports.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Vector<Transport> clientTransports = (Vector<Transport>)transports.get(client);
+        assertEquals(addresses.size(), clientTransports.size());
+        int cnt = 0;
+        for(Transport t: clientTransports) {
+          Field emitter = t.getClass().getDeclaredField("emitter");
+          emitter.setAccessible(true);
+          String address;
+          int port;
+          if (emitter.get(t) instanceof UnicastEventEmitter) {
+            address = ((UnicastEventEmitter)emitter.get(t)).getAddress().getHostAddress();
+            port = ((UnicastEventEmitter)emitter.get(t)).getPort();
+          } else {
+            address = ((MulticastEventEmitter)emitter.get(t)).getMulticastAddress().getHostAddress();
+            port = ((MulticastEventEmitter)emitter.get(t)).getMulticastPort();
+          }
+          assertEquals(address, addresses.get(cnt++));
+          assertEquals(port, 1234);
+        }
+      } catch(Exception e) {
+        // should not throw exception
+        assertTrue(false);
+      }
+      mondemandConfigFile.deleteOnExit();
+
+    } catch(Exception e) {
+      // should no see any exceptions
+      fail("this should never happen!");
+    }
+  }
+
   @Test
     public void testEmptyFlush() {
       client.flush();
-      client.flushStats();
       client.flushLogs();
-      client.flushStats(false);
+      client.flush(true);
     }
 
   @Test
@@ -209,7 +600,7 @@ public class ClientTest {
       c.increment(5);
       c.increment("testIncrement");
       c.increment("testIncrement2", 10);
-      c.flushStats(true);
+      c.flush(true);
       assertEquals(t.stats.length, 3);
     }
 
@@ -219,7 +610,7 @@ public class ClientTest {
       client.decrement(5);
       client.decrement("testDecrement");
       client.decrement("testDecrement2", 10);
-      client.flushStats(true);
+      client.flush(true);
       assertEquals(transport.stats.length, 3);
     }
 
@@ -227,7 +618,7 @@ public class ClientTest {
     public void testSetKey() {
       client.setKey("testSetKey", 123);
       client.setKey("testSetKeyLong", 123L);
-      client.flushStats();
+      client.flush();
       assertEquals(transport.stats.length, 2);
     }
 
@@ -280,21 +671,21 @@ public class ClientTest {
       client.flushLogs();
 
       client.setKey("a", 123);
-      client.flushStats();
+      client.flush();
 
       PrintStream currentError = System.err;
       System.setErr(null);
       client.log(Level.CRIT, null, "test", null);
       client.setKey("b", 2);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       System.setErr(currentError);
 
       client.finalize();
       client = null;
 
       t.sendLogs(null, null, null);
-      t.sendStats(null, null, null);
+      t.send(null, null, null, null);
 
       client = new Client("ClientTest");
       client.flushLogs();
@@ -343,17 +734,17 @@ public class ClientTest {
       client.setKey(StatType.Gauge, "anotherGauge", 566);
       client.setKey(StatType.Counter, "anotherCounter", 555);
       client.increment("yac",25);
-      client.flushStats();
+      client.flush();
 
       client.setNoSendLevel(Level.INFO);
       client.log("testTraceId", 555, Level.DEBUG, new TraceId(3117), "did it trace?",null);
 
       t.sendLogs(null, null, null);
-      t.sendStats(null,null, null);
+      t.send(null, null, null, null);
       t.shutdown();
 
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       t.shutdown();
     }
 
@@ -412,17 +803,17 @@ public class ClientTest {
 
       contexts.set(client, null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.getContextKeys();
 
       stats.set(client,null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.setKey(null, 1);
 
       transports.set(client, null);
       client.flushLogs();
-      client.flushStats();
+      client.flush();
       client.addTransport(null);
 
       messages.set(client, null);
@@ -524,6 +915,7 @@ public class ClientTest {
   {
     public LogMessage[] logs = new LogMessage[0];
     public StatsMessage[] stats = new StatsMessage[0];
+    public SamplesMessage[] samples = new SamplesMessage[0];
     public TraceId traceId = null;
 
     @Override
@@ -541,13 +933,17 @@ public class ClientTest {
     }
 
     @Override
-    public void sendStats (String programId,
-                           StatsMessage[] messages,
-                           Context[] contexts)
-    {
+    public void send (String programId,
+        StatsMessage[] messages,
+        SamplesMessage[] samples,
+        Context[] contexts) {
       stats = new StatsMessage[messages.length];
       for(int i=0; i<stats.length; ++i) {
         stats[i] = messages[i];
+      }
+      this.samples = new SamplesMessage[samples.length];
+      for(int i=0; i<this.samples.length; ++i) {
+        this.samples[i] = samples[i];
       }
     }
 
@@ -577,10 +973,10 @@ public class ClientTest {
     }
 
     @Override
-    public void sendStats (String programId,
-                           StatsMessage[] messages,
-                           Context[] contexts)
-      throws TransportException
+    public void send (String programId,
+        StatsMessage[] messages,
+        SamplesMessage[] samples,
+        Context[] contexts) throws TransportException
     {
       throw new TransportException("BogusTransport");
     }

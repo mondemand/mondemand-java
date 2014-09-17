@@ -12,9 +12,14 @@
 
 package org.mondemand.transport;
 
+import java.util.ArrayList;
+import java.util.Collections;
+
 import org.mondemand.Context;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
+import org.mondemand.SampleTrackType;
+import org.mondemand.SamplesMessage;
 import org.mondemand.StatsMessage;
 import org.mondemand.Transport;
 
@@ -34,7 +39,7 @@ public class StderrTransport implements Transport {
         if (messages[i].getTraceId() != null) {
           System.err.println("["+Level.STRINGS[messages[i].getLevel()]+"] - "+
               messages[i].getFilename()  + ":" + messages[i].getLine() + " " +
-              "[" + messages[i].getTraceId() + "] " + 
+              "[" + messages[i].getTraceId() + "] " +
               messages[i].getMessage() + "(" + messages[i].getRepeat() + ")");
         } else {
           System.err.println("["+Level.STRINGS[messages[i].getLevel()]+"] - " +
@@ -43,6 +48,14 @@ public class StderrTransport implements Transport {
         }
       } catch(Exception e) {}
     }
+  }
+
+  public void send (String programId,
+      StatsMessage[] stats,
+      SamplesMessage[] samples,
+      Context[] contexts) {
+   sendStats(programId, stats, contexts);
+   sendSamples(programId, samples);
   }
 
   public void sendStats (String programId,
@@ -61,6 +74,45 @@ public class StderrTransport implements Transport {
       }
     }
   }
+
+  public void sendSamples(String programId, SamplesMessage[] messages) {
+    if(messages == null) return;
+
+    for(SamplesMessage msg: messages) {
+      if(msg.getTrackingTypeValue() > 0) {
+        // first sort the samples
+        ArrayList<Integer> sortedSamples = msg.getSamples();
+        Collections.sort(sortedSamples);
+
+        // go through all the trackTypes and if one is set for the counter, log that
+        for(SampleTrackType trackType: SampleTrackType.values()) {
+          if( (msg.getTrackingTypeValue() & trackType.value) == trackType.value) {
+            // default value (in case samples were not updated since last log)
+            long value = 0;
+            if(sortedSamples.size() != 0) {
+              // values for average, sum and count are not coming from sortedSamples
+              if(trackType.value == SampleTrackType.AVG.value) {
+                value = msg.getCounter()/msg.getUpdateCounts();
+              } else if(trackType.value == SampleTrackType.SUM.value) {
+                value = msg.getCounter();
+              } else if(trackType.value == SampleTrackType.COUNT.value) {
+                value = msg.getUpdateCounts();
+              } else {
+                value = sortedSamples.get((int)( (sortedSamples.size() - 1) * trackType.indexInSamples));
+              }
+            } else {
+              // samples were not updated, i.e., no increment since the last
+              // log, so log a value of 0
+            }
+            // "min_", "max_", ... will be added to the original key
+            System.err.println("["+programId+"] " + msg.getType() + " : "
+                + msg.getKey() + trackType.keySuffix + " : "
+                + value);
+          }
+        }
+      }
+    }
+ }
 
   public void sendTrace (String programId,
                          Context[] contexts)

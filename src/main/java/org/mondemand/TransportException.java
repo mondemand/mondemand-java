@@ -19,6 +19,8 @@ package org.mondemand;
  */
 public class TransportException extends Exception {
 
+  private static final long serialVersionUID = -4729328172963540215L;
+
   public TransportException() {
     super();
   }

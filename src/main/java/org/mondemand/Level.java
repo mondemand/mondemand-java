@@ -20,11 +20,13 @@ import java.io.Serializable;
  */
 public class Level implements Serializable {
 
+  private static final long serialVersionUID = -289146703858141906L;
+
   /**
    * textual representation
    */
   public final static String STRINGS[] = { "emerg", "alert", "crit",
-    "error", "warning", "notice", "info", "debug", "all" };	
+    "error", "warning", "notice", "info", "debug", "all" };
 
   /**
    * all off
@@ -74,6 +76,6 @@ public class Level implements Serializable {
   /**
    * Default value to send all messages for the Logger
    */
-  public final static int ALL = 8;	
+  public final static int ALL = 8;
 
 }

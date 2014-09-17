@@ -15,6 +15,7 @@ package org.mondemand;
 import java.io.Serializable;
 
 public class Context implements Serializable {
+  private static final long serialVersionUID = -6801370115780644951L;
   private String key = null;
   private String value = null;
 

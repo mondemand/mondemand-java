@@ -13,12 +13,25 @@
 package org.mondemand;
 
 import java.io.Serializable;
+
 import org.mondemand.StatType;
 
 public class StatsMessage implements Serializable {
+  private static final long serialVersionUID = 6151047586994516863L;
+
   private String key = null;
   private StatType type = StatType.Unknown;
   private long counter = 0;
+
+  /**
+   * constructor
+   * @param key - counter's key
+   * @param type - counter's type
+   */
+  public StatsMessage(String key, StatType type) {
+    this.key = key;
+    this.type = type;
+  }
 
   /**
    * @return the key
@@ -30,6 +43,7 @@ public class StatsMessage implements Serializable {
   /**
    * @param key the key to set
    */
+  @Deprecated
   public void setKey(String key) {
     this.key = key;
   }
@@ -39,6 +53,18 @@ public class StatsMessage implements Serializable {
    */
   public long getCounter() {
     return counter;
+  }
+
+  /**
+   * increments the counter by some value, replaces setCounter()
+   * @param value - value to increment by
+   */
+  public void incrementBy(int value) {
+    // synchronize on this object so it won't be updated while another
+    // thread is sending this instance's stats
+    synchronized(this) {
+      counter += value;
+    }
   }
 
   /**
@@ -58,6 +84,7 @@ public class StatsMessage implements Serializable {
   /**
    * @param type set the type of the stat
    */
+  @Deprecated
   public void setType (StatType type) {
     this.type = type;
   }
