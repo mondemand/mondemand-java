@@ -4,13 +4,14 @@ import java.net.InetAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.log4j.Logger;
 import org.mondemand.transport.LWESTransport;
 
+import com.google.common.util.concurrent.AtomicLongMap;
+
 /**
- * This is an mondemand client that emit stats according to platformhash, site, aduit
+ * This is an mondemand client that emit stats according to different context
  *
  */
 public class RealTimeClient {
@@ -20,13 +21,11 @@ public class RealTimeClient {
   protected final int port;
   protected final Client client;
   protected final String clientName;
-  private ConcurrentMap<Context, ConcurrentHashMap<String, AtomicLong>>  mondemandContent
-        = new ConcurrentHashMap<Context, ConcurrentHashMap<String, AtomicLong>>();
+  private ConcurrentMap<Context, AtomicLongMap<String>>  mondemandContent
+        = new ConcurrentHashMap<Context, AtomicLongMap<String>>();
   private volatile boolean enabled = true;
   protected final int INTERVAL = 60000;
   protected boolean statsReset = true;
-
-  private static RealTimeClient rtClient = null;
 
   /**
    * constructor for the singleton
@@ -34,28 +33,12 @@ public class RealTimeClient {
    * @param host
    * @param port
    */
-  protected RealTimeClient(String clientName, String host, int port)
+  public RealTimeClient(String clientName, String host, int port)
   {
     this.clientName = clientName;
     this.host = host;
     this.port = port;
     this.client = createClient();
-  }
-
-  /**
-   * create a singleton for the realtime mondemand client
-   * @param clientName
-   * @param host
-   * @param port
-   * @return the singleton of the RealTimeMondemandClient
-   */
-  public static synchronized RealTimeClient getInstance(String clientName, String host, int port)
-  {
-    if (rtClient == null)
-    {
-      rtClient = new RealTimeClient(clientName, host, port);
-    }
-    return rtClient;
   }
 
   private Client createClient()
@@ -99,39 +82,26 @@ public class RealTimeClient {
 
   /**
    * Increment the count for the map
-   * @param ph : platformhash
-   * @param site : siteId
-   * @param adunit : adunitId
-   * @param key : KeyType: blank, advertiser_revenue, etc
-   * @param value : the value to increase
+   * @param context context
+   * @param keyType key
+   * @param value value
    */
   public void increment(Context context, String keyType, long value)
   {
-    ConcurrentHashMap<String, AtomicLong> stats = mondemandContent.get(context);
-    if (stats == null)
-    {
-      stats = new ConcurrentHashMap<String, AtomicLong>();
-      stats.put(keyType, new AtomicLong(value));
-    }
-    else
-    {
-       if (!stats.containsKey(keyType))
+    synchronized (keyType) {
+      AtomicLongMap<String> stats = mondemandContent.get(context);
+      if (stats == null)
       {
-        stats.put(keyType, new AtomicLong(value));
+        stats = AtomicLongMap.create();
+        mondemandContent.put(context, stats);
       }
-      else
-      {
-        stats.get(keyType).addAndGet(value);
-      }
+      stats.addAndGet(keyType, value);
     }
-    mondemandContent.put(context, stats);
   }
 
   /**
    * Increment the count for the map
-   * @param ph : platformhash
-   * @param site : siteId
-   * @param adunit : adunitId
+   * @param context : context
    * @param key : KeyType: blank, advertiser_revenue, etc
    */
   public void increment(Context context, String keyType )
@@ -150,11 +120,11 @@ public class RealTimeClient {
       public void run()
       {
         while (enabled) {
-          for (Map.Entry<Context, ConcurrentHashMap<String, AtomicLong>> entry : mondemandContent.entrySet())
+          for (Map.Entry<Context, AtomicLongMap<String>> entry : mondemandContent.entrySet())
           {
             entry.getKey().addContext(client);
-            ConcurrentHashMap<String, AtomicLong> stats = entry.getValue();
-            for (Map.Entry<String, AtomicLong> stat : stats.entrySet())
+            AtomicLongMap<String> stats = entry.getValue();
+            for (Map.Entry<String, Long> stat : stats.asMap().entrySet())
             {
               client.increment(stat.getKey(), stat.getValue().intValue());
             }
@@ -176,9 +146,11 @@ public class RealTimeClient {
     stats.start();
   }
 
-  public ConcurrentMap<Context, ConcurrentHashMap<String, AtomicLong>> getMondemandContent() {
+  public ConcurrentMap<Context, AtomicLongMap<String>> getMondemandContent() {
     return mondemandContent;
   }
 
-
+  public Client getClient() {
+    return client;
+  }
 }

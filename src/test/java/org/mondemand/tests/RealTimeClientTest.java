@@ -10,7 +10,7 @@ import org.mondemand.Context;
 import org.mondemand.RealTimeClient;
 
 public class RealTimeClientTest {
-  RealTimeClient rtClient = RealTimeClient.getInstance("test", "127.0.0.1", 9000);
+  RealTimeClient rtClient = new RealTimeClient("test", "127.0.0.1", 9000);
   Context context = new Context("key", "value");
   String key1 = "key1";
   String key2 = "key2";
@@ -29,7 +29,6 @@ public class RealTimeClientTest {
   public void createClient()
   {
     System.setProperty("com.example", "abc");
-    rtClient = RealTimeClient.getInstance("test", "127.0.0.1", 9000);
     assertEquals(rtClient.getClass(), RealTimeClient.class);
   }
 
@@ -43,24 +42,15 @@ public class RealTimeClientTest {
     }
     assertTrue(rtClient.getMondemandContent().containsKey(context));
     assertTrue(rtClient.getMondemandContent().get(context).containsKey(key1));
-    assertEquals(1000l, rtClient.getMondemandContent().get(context).get(key1).longValue());
+    assertEquals(1000l, rtClient.getMondemandContent().get(context).get(key1));
     assertTrue(rtClient.getMondemandContent().containsKey(context));
     assertTrue(rtClient.getMondemandContent().get(context).containsKey(key2));
-    assertEquals(100000l, rtClient.getMondemandContent().get(context).get(key2).longValue());
+    assertEquals(100000l, rtClient.getMondemandContent().get(context).get(key2));
   }
 
   @Test
-  public void testSingletonClient()
+  public void testClientClear()
   {
-    rtClient = RealTimeClient.getInstance("test", "127.0.0.1", 9000);
-    assertEquals(100000l, rtClient.getMondemandContent().get(context).get(key2).longValue());
-    assertEquals(1000l, rtClient.getMondemandContent().get(context).get(key1).longValue());
-  }
-
-  @Test
-  public void testSingletonClientClear()
-  {
-    rtClient = RealTimeClient.getInstance("test", "127.0.0.1", 9000);
     rtClient.getMondemandContent().clear();
     assertTrue(rtClient.getMondemandContent().isEmpty());
   }
@@ -68,9 +58,9 @@ public class RealTimeClientTest {
   @Test
   public void testMultiThreadIncrement() throws InterruptedException
   {
-    for (int j = 0; j<100; j++)
+
+    for (int j=0; j<100; j++)
     {
-      System.out.println(j);
       class IncrementThread implements Runnable {
         public void run()
         {
@@ -94,10 +84,7 @@ public class RealTimeClientTest {
         threads[i].join();
       }
 
-      Thread.sleep(100);
-      System.out.println(rtClient.getMondemandContent());
-      assertEquals(3000, rtClient.getMondemandContent().get(context).get(key1).longValue());
-      Thread.sleep(10);
+      assertEquals(3000, rtClient.getMondemandContent().get(context).get(key1));
       rtClient.getMondemandContent().clear();
     }
   }

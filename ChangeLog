@@ -1,3 +1,6 @@
+Version 6.0.0
+  * added realtime mondemand client as a singleton to handle different context stats
+
 Version 5.1.0
   * added (optional, disabled by default) feature to automatically emit stats and logs
   * added a new Sample message with capability to emit any of min, max, avg,
