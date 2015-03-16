@@ -63,8 +63,12 @@ import org.mondemand.transport.LWESTransport;
 import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
 
-public class ClientTest {
+import com.google.common.util.concurrent.AtomicLongMap;
 
+public class ClientTest {
+  Context context = new Context("key", "value");
+  String key1 = "key1";
+  String key2 = "key2";
   // stub unicast emitter for LwesTransport
   class StubUnicastEventEmitter extends UnicastEventEmitter {
 
@@ -995,6 +999,78 @@ public class ClientTest {
       throw new TransportException("BogusTransport");
     }
   }
+
+  @Test
+  public void testIncrementMap()
+  {
+    Map<Context, AtomicLongMap<String>> map = new HashMap<Context, AtomicLongMap<String>>();
+    for (int i=0; i<1000; i++)
+    {
+      client.increment(map, context, "key1");
+      client.increment(map, context, "key2", 100l);
+    }
+    assertTrue(map.containsKey(context));
+    assertTrue(map.get(context).containsKey(key1));
+    assertEquals(1000l, map.get(context).get(key1));
+    assertTrue(map.containsKey(context));
+    assertTrue(map.get(context).containsKey(key2));
+    assertEquals(100000l, map.get(context).get(key2));
+  }
+
+  @Test
+  public void testMultiThreadIncrement() throws InterruptedException
+  {
+    final Map<Context, AtomicLongMap<String>> map = new ConcurrentHashMap<Context, AtomicLongMap<String>>();
+    for (int j=0; j<100; j++)
+    {
+      class IncrementThread implements Runnable {
+        public void run()
+        {
+          for (int i=0; i< 1000; i++)
+          {
+            client.increment(map, context, key1);
+          }
+        }
+      }
+
+      Thread[] threads = new Thread[3];
+      for (int n = 0; n<threads.length; n++)
+      {
+        Thread t = new Thread(new IncrementThread());
+        t.start();
+        threads[n] = t;
+      }
+
+      for(int i = 0; i < threads.length; i++)
+      {
+        threads[i].join();
+      }
+
+      assertEquals(3000, map.get(context).get(key1));
+      map.clear();
+    }
+  }
+
+  @Test
+  public void testFlush()
+  {
+    Map<Context, AtomicLongMap<String>> map = new HashMap<Context, AtomicLongMap<String>>();
+    for (int i=0; i<1000; i++)
+    {
+      client.increment(map, context, "key1");
+      client.increment(map, context, "key2", 100l);
+    }
+    client.startExports(map, 600);
+    try
+    {
+      Thread.sleep(60);
+    }
+    catch (InterruptedException ie)
+    {
+    }
+    assertTrue(map.isEmpty());
+  }
+
 
   public static class TestErrorHandler implements ErrorHandler
   {

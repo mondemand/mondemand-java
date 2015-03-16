@@ -22,8 +22,11 @@ import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.log4j.Logger;
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
+
+import com.google.common.util.concurrent.AtomicLongMap;
 
 /**
  * This is the main entry point to MonDemand.  Users can create client objects and use them to
@@ -32,6 +35,8 @@ import org.mondemand.util.ClassUtils;
  *
  */
 public class Client {
+  private static final Logger LOG = Logger.getLogger(Client.class);
+
   /********************************
    * CONSTANTS                    *
    ********************************/
@@ -546,6 +551,38 @@ public class Client {
     }
     // update the counter
     realValue.incrementBy(value);
+  }
+
+  /**
+   * Given context&Stats map, increment according to context and key/value
+   * @param contextStats ConcurrentHashMap<Context, AtomicLongMap<String>> contextStats
+   * @param context context
+   * @param keyType key
+   * @param value value
+   */
+  public void increment(Map<Context, AtomicLongMap<String>> contextStats,
+      Context context, String keyType, long value)
+  {
+    synchronized (keyType) {
+      AtomicLongMap<String> stats = contextStats.get(context);
+      if (stats == null)
+      {
+        stats = AtomicLongMap.create();
+        contextStats.put(context, stats);
+      }
+      stats.addAndGet(keyType, value);
+    }
+  }
+
+  /**
+   * Increment the count for the map
+   * @param context : context
+   * @param key : KeyType: blank, advertiser_revenue, etc
+   */
+  public void increment(Map<Context, AtomicLongMap<String>> contextStats,
+      Context context, String keyType )
+  {
+    increment(contextStats, context, keyType, 1);
   }
 
   /**
@@ -1139,6 +1176,46 @@ public class Client {
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);
     }
+  }
+
+  /**
+   * emit the events
+   */
+  public void startExports(Map<Context, AtomicLongMap<String>> contextStats, int emitInterval)
+  {
+    final Map<Context, AtomicLongMap<String>> final_map = contextStats;
+    final int finalEmitInterval = emitInterval;
+    Thread thread = new Thread(new Runnable()
+    {
+      @Override
+      public void run()
+      {
+        while (true) {
+          stats.clear();
+          for (Map.Entry<Context, AtomicLongMap<String>> entry : final_map.entrySet())
+          {
+            addContext(entry.getKey().getKey(), entry.getKey().getValue());
+            AtomicLongMap<String> stats = entry.getValue();
+            for (Map.Entry<String, Long> stat : stats.asMap().entrySet())
+            {
+              increment(stat.getKey(), stat.getValue().intValue());
+            }
+            flush(true);
+          }
+          final_map.clear();
+          try
+          {
+            Thread.sleep(finalEmitInterval);
+          }
+          catch (InterruptedException ie)
+          {
+            LOG.error("Interrupted while sleeping between mondemand events.", ie);
+          }
+        }
+      }
+    });
+    thread.setDaemon(true);
+    thread.start();
   }
 
 }
