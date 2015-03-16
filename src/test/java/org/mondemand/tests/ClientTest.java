@@ -1020,7 +1020,7 @@ public class ClientTest {
   @Test
   public void testMultiThreadIncrement() throws InterruptedException
   {
-    final Map<Context, AtomicLongMap<String>> map = new ConcurrentHashMap<Context, AtomicLongMap<String>>();
+    final ConcurrentHashMap<Context, AtomicLongMap<String>> map = new ConcurrentHashMap<Context, AtomicLongMap<String>>();
     for (int j=0; j<100; j++)
     {
       class IncrementThread implements Runnable {

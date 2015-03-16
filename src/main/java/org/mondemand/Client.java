@@ -560,18 +560,16 @@ public class Client {
    * @param keyType key
    * @param value value
    */
-  public void increment(Map<Context, AtomicLongMap<String>> contextStats,
+  public synchronized void increment(Map<Context, AtomicLongMap<String>> contextStats,
       Context context, String keyType, long value)
   {
-    synchronized (keyType) {
-      AtomicLongMap<String> stats = contextStats.get(context);
-      if (stats == null)
-      {
-        stats = AtomicLongMap.create();
-        contextStats.put(context, stats);
-      }
-      stats.addAndGet(keyType, value);
+    AtomicLongMap<String> stats = contextStats.get(context);
+    if (stats == null)
+    {
+      stats = AtomicLongMap.create();
+      contextStats.put(context, stats);
     }
+    stats.addAndGet(keyType, value);
   }
 
   /**
@@ -579,7 +577,7 @@ public class Client {
    * @param context : context
    * @param key : KeyType: blank, advertiser_revenue, etc
    */
-  public void increment(Map<Context, AtomicLongMap<String>> contextStats,
+  public synchronized void increment(Map<Context, AtomicLongMap<String>> contextStats,
       Context context, String keyType )
   {
     increment(contextStats, context, keyType, 1);
