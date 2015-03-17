@@ -48,13 +48,14 @@ import org.lwes.emitter.MulticastEventEmitter;
 import org.lwes.emitter.UnicastEventEmitter;
 import org.mondemand.Client;
 import org.mondemand.Context;
+import org.mondemand.ContextList;
 import org.mondemand.ErrorHandler;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
+import org.mondemand.SampleTrackType;
 import org.mondemand.SamplesMessage;
 import org.mondemand.StatType;
 import org.mondemand.StatsMessage;
-import org.mondemand.SampleTrackType;
 import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
@@ -63,12 +64,7 @@ import org.mondemand.transport.LWESTransport;
 import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
 
-import com.google.common.util.concurrent.AtomicLongMap;
-
 public class ClientTest {
-  Context context = new Context("key", "value");
-  String key1 = "key1";
-  String key2 = "key2";
   // stub unicast emitter for LwesTransport
   class StubUnicastEventEmitter extends UnicastEventEmitter {
 
@@ -1003,24 +999,28 @@ public class ClientTest {
   @Test
   public void testIncrementMap()
   {
-    Map<Context, AtomicLongMap<String>> map = new HashMap<Context, AtomicLongMap<String>>();
+    Context context = new Context("k1", "v1");
+    ContextList contexts = new ContextList();
+    contexts.addContext(context);
     for (int i=0; i<1000; i++)
     {
-      client.increment(map, context, "key1");
-      client.increment(map, context, "key2", 100l);
+      client.increment(contexts, "key1");
+      client.increment(contexts, "key2", 100l);
     }
-    assertTrue(map.containsKey(context));
-    assertTrue(map.get(context).containsKey(key1));
-    assertEquals(1000l, map.get(context).get(key1));
-    assertTrue(map.containsKey(context));
-    assertTrue(map.get(context).containsKey(key2));
-    assertEquals(100000l, map.get(context).get(key2));
+    assertTrue(client.getContextStats().containsKey(contexts));
+    assertTrue(client.getContextStats().get(contexts).containsKey("key1"));
+    assertEquals(1000l, client.getContextStats().get(contexts).get("key1"));
+    assertTrue(client.getContextStats().containsKey(contexts));
+    assertTrue(client.getContextStats().get(contexts).containsKey("key2"));
+    assertEquals(100000l, client.getContextStats().get(contexts).get("key2"));
   }
 
   @Test
   public void testMultiThreadIncrement() throws InterruptedException
   {
-    final ConcurrentHashMap<Context, AtomicLongMap<String>> map = new ConcurrentHashMap<Context, AtomicLongMap<String>>();
+    Context context = new Context("k1", "v1");
+    final ContextList contexts = new ContextList();
+    contexts.addContext(context);
     for (int j=0; j<100; j++)
     {
       class IncrementThread implements Runnable {
@@ -1028,7 +1028,7 @@ public class ClientTest {
         {
           for (int i=0; i< 1000; i++)
           {
-            client.increment(map, context, key1);
+            client.increment(contexts, "key1");
           }
         }
       }
@@ -1046,21 +1046,23 @@ public class ClientTest {
         threads[i].join();
       }
 
-      assertEquals(3000, map.get(context).get(key1));
-      map.clear();
+      assertEquals(3000, client.getContextStats().get(contexts).get("key1"));
+      client.flush();
     }
   }
 
   @Test
   public void testFlush()
   {
-    Map<Context, AtomicLongMap<String>> map = new HashMap<Context, AtomicLongMap<String>>();
+    Context context = new Context("k1", "v1");
+    ContextList contexts = new ContextList();
+    contexts.addContext(context);
     for (int i=0; i<1000; i++)
     {
-      client.increment(map, context, "key1");
-      client.increment(map, context, "key2", 100l);
+      client.increment(contexts, "key1");
+      client.increment(contexts, "key2", 100l);
     }
-    client.startExports(map, 600);
+    client.flush();
     try
     {
       Thread.sleep(60);
@@ -1068,7 +1070,7 @@ public class ClientTest {
     catch (InterruptedException ie)
     {
     }
-    assertTrue(map.isEmpty());
+    assertTrue(client.getContextStats().isEmpty());
   }
 
 

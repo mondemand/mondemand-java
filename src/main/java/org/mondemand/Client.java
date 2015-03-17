@@ -15,7 +15,9 @@ package org.mondemand;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -35,8 +37,6 @@ import com.google.common.util.concurrent.AtomicLongMap;
  *
  */
 public class Client {
-  private static final Logger LOG = Logger.getLogger(Client.class);
-
   /********************************
    * CONSTANTS                    *
    ********************************/
@@ -62,6 +62,7 @@ public class Client {
   private ConcurrentHashMap<String,LogMessage> messages = null;
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private ConcurrentHashMap<String,SamplesMessage> samples = null;
+  private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
   private Vector<Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
@@ -143,6 +144,7 @@ public class Client {
     stats = new ConcurrentHashMap<String,StatsMessage>();
     samples = new ConcurrentHashMap<String,SamplesMessage>();
     transports = new Vector<Transport>();
+    contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
 
     // create and start the emitter thread
     if(autoStatEmit) {
@@ -223,6 +225,7 @@ public class Client {
     messages.clear();
     stats.clear();
     samples.clear();
+    contextStats.clear();
 
     // shutdown all the transports
     if(transports != null) {
@@ -471,6 +474,7 @@ public class Client {
   public void flush(boolean resetStats) {
     flushLogs();
     dispatchStatsSamples();
+    dispatchContextStats();
     if(resetStats) {
       if(stats != null) {
         stats.clear();
@@ -560,8 +564,7 @@ public class Client {
    * @param keyType key
    * @param value value
    */
-  public synchronized void increment(Map<Context, AtomicLongMap<String>> contextStats,
-      Context context, String keyType, long value)
+  public synchronized void increment(ContextList context, String keyType, long value)
   {
     AtomicLongMap<String> stats = contextStats.get(context);
     if (stats == null)
@@ -577,10 +580,9 @@ public class Client {
    * @param context : context
    * @param key : KeyType: blank, advertiser_revenue, etc
    */
-  public synchronized void increment(Map<Context, AtomicLongMap<String>> contextStats,
-      Context context, String keyType )
+  public void increment(ContextList context, String keyType )
   {
-    increment(contextStats, context, keyType, 1);
+    increment(context, keyType, 1);
   }
 
   /**
@@ -1179,41 +1181,37 @@ public class Client {
   /**
    * emit the events
    */
-  public void startExports(Map<Context, AtomicLongMap<String>> contextStats, int emitInterval)
+  private synchronized void dispatchContextStats()
   {
-    final Map<Context, AtomicLongMap<String>> final_map = contextStats;
-    final int finalEmitInterval = emitInterval;
-    Thread thread = new Thread(new Runnable()
+    if(this.transports == null ||
+        this.contextStats == null || this.contextStats.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStats.entrySet())
     {
-      @Override
-      public void run()
+      List<Context> newContexts = new ArrayList<Context>(this.contexts.values());
+      newContexts.addAll(entry.getKey().getList());
+      List<StatsMessage> statsMsgs = new ArrayList<StatsMessage>();
+      for (Map.Entry<String, Long> stat : entry.getValue().asMap().entrySet())
       {
-        while (true) {
-          stats.clear();
-          for (Map.Entry<Context, AtomicLongMap<String>> entry : final_map.entrySet())
-          {
-            addContext(entry.getKey().getKey(), entry.getKey().getValue());
-            AtomicLongMap<String> stats = entry.getValue();
-            for (Map.Entry<String, Long> stat : stats.asMap().entrySet())
-            {
-              increment(stat.getKey(), stat.getValue().intValue());
-            }
-            flush(true);
-          }
-          final_map.clear();
-          try
-          {
-            Thread.sleep(finalEmitInterval);
-          }
-          catch (InterruptedException ie)
-          {
-            LOG.error("Interrupted while sleeping between mondemand events.", ie);
-          }
+        StatsMessage statsMessage = new StatsMessage(stat.getKey(), StatType.Counter);
+        statsMessage.incrementBy(stat.getValue().intValue());
+        statsMsgs.add(statsMessage);
+      }
+      for(int i=0; i<this.transports.size(); ++i) {
+        Transport t = transports.elementAt(i);
+        try {
+          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null, newContexts.toArray(new Context[0]));
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
       }
-    });
-    thread.setDaemon(true);
-    thread.start();
+    }
+    contextStats.clear();
+  }
+
+  public ConcurrentHashMap<ContextList, AtomicLongMap<String>> getContextStats() {
+    return contextStats;
   }
 
 }
