@@ -1007,21 +1007,35 @@ public class ClientTest {
       client.increment(contexts, "key1");
       client.increment(contexts, "key2", 100l);
     }
+    Context context2 = new Context("k1", "v2");
+    ContextList contexts2 = new ContextList();
+    contexts.addContext(context2);
+    for (int i=0; i<1000; i++)
+    {
+      client.increment(contexts2, "key1", 10l);
+    }
     assertTrue(client.getContextStats().containsKey(contexts));
     assertTrue(client.getContextStats().get(contexts).containsKey("key1"));
     assertEquals(1000l, client.getContextStats().get(contexts).get("key1"));
     assertTrue(client.getContextStats().containsKey(contexts));
     assertTrue(client.getContextStats().get(contexts).containsKey("key2"));
     assertEquals(100000l, client.getContextStats().get(contexts).get("key2"));
+
+    assertTrue(client.getContextStats().containsKey(contexts2));
+    assertTrue(client.getContextStats().get(contexts2).containsKey("key1"));
+    assertEquals(10000l, client.getContextStats().get(contexts2).get("key1"));
+
   }
 
   @Test
   public void testMultiThreadIncrement() throws InterruptedException
   {
-    Context context = new Context("k1", "v1");
+    Context context1 = new Context("k1", "v1");
+    Context context2 = new Context("k2", "v2");
     final ContextList contexts = new ContextList();
-    contexts.addContext(context);
-    for (int j=0; j<100; j++)
+    contexts.addContext(context1);
+    contexts.addContext(context2);
+    for (int j=0; j<10; j++)
     {
       class IncrementThread implements Runnable {
         public void run()
