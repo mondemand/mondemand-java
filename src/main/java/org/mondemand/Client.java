@@ -24,7 +24,6 @@ import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.log4j.Logger;
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
 
@@ -564,13 +563,14 @@ public class Client {
    * @param keyType key
    * @param value value
    */
-  public synchronized void increment(ContextList context, String keyType, long value)
+  public void increment(ContextList context, String keyType, long value)
   {
     AtomicLongMap<String> stats = contextStats.get(context);
     if (stats == null)
     {
       stats = AtomicLongMap.create();
-      contextStats.put(context, stats);
+      contextStats.putIfAbsent(context, stats);
+      stats = contextStats.get(context);
     }
     stats.addAndGet(keyType, value);
   }
