@@ -1,5 +1,5 @@
-Version 6.0.0
-  * added realtime mondemand client as a singleton to handle different context stats
+Version 5.2.0
+  * added function in client to handle different context stats
 
 Version 5.1.0
   * added (optional, disabled by default) feature to automatically emit stats and logs
