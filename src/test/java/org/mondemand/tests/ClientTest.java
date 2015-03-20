@@ -400,7 +400,7 @@ public class ClientTest {
         client.addSample("samplekey_" + cnt, cnt, SampleTrackType.AVG.value);
       }
       // now sleep for 1.2 sec to make sure auto emit kicks in
-      Thread.sleep(1200);
+      Thread.sleep(1500);
 
       // make sure Count*2 number of type/key/values are emitted, one for regular
       // counter,  and one for avg value of the samples.
@@ -1060,7 +1060,7 @@ public class ClientTest {
         threads[i].join();
       }
 
-      assertEquals(3000, client.getContextStats().get(contexts).get("key1"));
+      assertEquals(3000 * (j+1), client.getContextStats().get(contexts).get("key1"));
       client.flush();
     }
   }
@@ -1084,7 +1084,7 @@ public class ClientTest {
     catch (InterruptedException ie)
     {
     }
-    assertTrue(client.getContextStats().isEmpty());
+    assertEquals(1000l, client.getContextStats().get(contexts).get("key1"));
   }
 
   @Test
@@ -1094,8 +1094,7 @@ public class ClientTest {
     for (int j=0; j<10; j++)
     {
 
-      client.flush();
-    }class IncrementThread implements Runnable {
+      class IncrementThread implements Runnable {
         public void run()
         {
           for (int i=0; i< 100; i++)
@@ -1119,6 +1118,8 @@ public class ClientTest {
       }
 
       assertEquals(300l, client.getSamples().get("k1").getCounter());
+      client.flush();
+    }
   }
 
 
