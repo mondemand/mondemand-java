@@ -623,7 +623,7 @@ public class Client {
     if(realValue == null) {
       // create the counter if doesn't exist
       realValue = new SamplesMessage(realKey, trackingTypeValue, samplesMaxCount);
-      this.samples.put(realKey, realValue);
+      this.samples.putIfAbsent(realKey, realValue);
     }
     // update the counter
     realValue.addSample(value);
@@ -1213,5 +1213,14 @@ public class Client {
   public ConcurrentHashMap<ContextList, AtomicLongMap<String>> getContextStats() {
     return contextStats;
   }
+
+  public ConcurrentHashMap<String, SamplesMessage> getSamples() {
+    return samples;
+  }
+
+  public void setSamples(ConcurrentHashMap<String, SamplesMessage> samples) {
+    this.samples = samples;
+  }
+
 
 }

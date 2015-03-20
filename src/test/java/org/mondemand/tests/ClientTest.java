@@ -1087,6 +1087,40 @@ public class ClientTest {
     assertTrue(client.getContextStats().isEmpty());
   }
 
+  @Test
+  public void testMultiThreadAddSample() throws InterruptedException
+  {
+
+    for (int j=0; j<10; j++)
+    {
+
+      client.flush();
+    }class IncrementThread implements Runnable {
+        public void run()
+        {
+          for (int i=0; i< 100; i++)
+          {
+            client.addSample("k1", 1, 328);
+          }
+        }
+      }
+
+      Thread[] threads = new Thread[3];
+      for (int n = 0; n<threads.length; n++)
+      {
+        Thread t = new Thread(new IncrementThread());
+        t.start();
+        threads[n] = t;
+      }
+
+      for(int i = 0; i < threads.length; i++)
+      {
+        threads[i].join();
+      }
+
+      assertEquals(300l, client.getSamples().get("k1").getCounter());
+  }
+
 
   public static class TestErrorHandler implements ErrorHandler
   {
