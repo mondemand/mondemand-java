@@ -400,7 +400,7 @@ public class ClientTest {
         client.addSample("samplekey_" + cnt, cnt, SampleTrackType.AVG.value);
       }
       // now sleep for 1.2 sec to make sure auto emit kicks in
-      Thread.sleep(1200);
+      Thread.sleep(1500);
 
       // make sure Count*2 number of type/key/values are emitted, one for regular
       // counter,  and one for avg value of the samples.
@@ -442,7 +442,8 @@ public class ClientTest {
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
         // the value for averages for sample counter should be 0 since average is a gauge
-        for(int idx=0; idx<Count*2; ++idx) {
+        // sample is cleared therefore we any got to Count not Count*2
+        for(int idx=0; idx<Count; ++idx) {
           assertNotNull(u.eventKeys.get("k" + idx));
           // extract the key
           String key = u.eventKeys.get("k" + idx);
@@ -1060,7 +1061,7 @@ public class ClientTest {
         threads[i].join();
       }
 
-      assertEquals(3000, client.getContextStats().get(contexts).get("key1"));
+      assertEquals(3000 * (j+1), client.getContextStats().get(contexts).get("key1"));
       client.flush();
     }
   }
@@ -1084,7 +1085,42 @@ public class ClientTest {
     catch (InterruptedException ie)
     {
     }
-    assertTrue(client.getContextStats().isEmpty());
+    assertEquals(1000l, client.getContextStats().get(contexts).get("key1"));
+  }
+
+  @Test
+  public void testMultiThreadAddSample() throws InterruptedException
+  {
+
+    for (int j=0; j<10; j++)
+    {
+
+      class IncrementThread implements Runnable {
+        public void run()
+        {
+          for (int i=0; i< 100; i++)
+          {
+            client.addSample("k1", 1, 328);
+          }
+        }
+      }
+
+      Thread[] threads = new Thread[3];
+      for (int n = 0; n<threads.length; n++)
+      {
+        Thread t = new Thread(new IncrementThread());
+        t.start();
+        threads[n] = t;
+      }
+
+      for(int i = 0; i < threads.length; i++)
+      {
+        threads[i].join();
+      }
+
+      assertEquals(300l, client.getSamples().get("k1").getCounter());
+      client.flush();
+    }
   }
 
 
