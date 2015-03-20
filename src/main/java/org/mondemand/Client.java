@@ -15,7 +15,9 @@ package org.mondemand;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
@@ -24,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
+
+import com.google.common.util.concurrent.AtomicLongMap;
 
 /**
  * This is the main entry point to MonDemand.  Users can create client objects and use them to
@@ -57,6 +61,7 @@ public class Client {
   private ConcurrentHashMap<String,LogMessage> messages = null;
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private ConcurrentHashMap<String,SamplesMessage> samples = null;
+  private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
   private Vector<Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
@@ -138,6 +143,7 @@ public class Client {
     stats = new ConcurrentHashMap<String,StatsMessage>();
     samples = new ConcurrentHashMap<String,SamplesMessage>();
     transports = new Vector<Transport>();
+    contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
 
     // create and start the emitter thread
     if(autoStatEmit) {
@@ -218,6 +224,7 @@ public class Client {
     messages.clear();
     stats.clear();
     samples.clear();
+    contextStats.clear();
 
     // shutdown all the transports
     if(transports != null) {
@@ -466,6 +473,7 @@ public class Client {
   public void flush(boolean resetStats) {
     flushLogs();
     dispatchStatsSamples();
+    dispatchContextStats();
     if(resetStats) {
       if(stats != null) {
         stats.clear();
@@ -546,6 +554,35 @@ public class Client {
     }
     // update the counter
     realValue.incrementBy(value);
+  }
+
+  /**
+   * Given context&Stats map, increment according to context and key/value
+   * @param contextStats ConcurrentHashMap<Context, AtomicLongMap<String>> contextStats
+   * @param context context
+   * @param keyType key
+   * @param value value
+   */
+  public void increment(ContextList context, String keyType, long value)
+  {
+    AtomicLongMap<String> stats = contextStats.get(context);
+    if (stats == null)
+    {
+      stats = AtomicLongMap.create();
+      contextStats.putIfAbsent(context, stats);
+      stats = contextStats.get(context);
+    }
+    stats.addAndGet(keyType, value);
+  }
+
+  /**
+   * Increment the count for the map
+   * @param context : context
+   * @param key : KeyType: blank, advertiser_revenue, etc
+   */
+  public void increment(ContextList context, String keyType )
+  {
+    increment(context, keyType, 1);
   }
 
   /**
@@ -1139,6 +1176,42 @@ public class Client {
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);
     }
+  }
+
+  /**
+   * emit the events
+   */
+  private synchronized void dispatchContextStats()
+  {
+    if(this.transports == null ||
+        this.contextStats == null || this.contextStats.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStats.entrySet())
+    {
+      List<Context> newContexts = new ArrayList<Context>(this.contexts.values());
+      newContexts.addAll(entry.getKey().getList());
+      List<StatsMessage> statsMsgs = new ArrayList<StatsMessage>();
+      for (Map.Entry<String, Long> stat : entry.getValue().asMap().entrySet())
+      {
+        StatsMessage statsMessage = new StatsMessage(stat.getKey(), StatType.Counter);
+        statsMessage.incrementBy(stat.getValue().intValue());
+        statsMsgs.add(statsMessage);
+      }
+      for(int i=0; i<this.transports.size(); ++i) {
+        Transport t = transports.elementAt(i);
+        try {
+          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null, newContexts.toArray(new Context[0]));
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendStats()", te);
+        }
+      }
+    }
+    contextStats.clear();
+  }
+
+  public ConcurrentHashMap<ContextList, AtomicLongMap<String>> getContextStats() {
+    return contextStats;
   }
 
 }
