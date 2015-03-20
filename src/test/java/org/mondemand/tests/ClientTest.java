@@ -442,7 +442,8 @@ public class ClientTest {
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
         // the value for averages for sample counter should be 0 since average is a gauge
-        for(int idx=0; idx<Count*2; ++idx) {
+        // sample is cleared therefore we any got to Count not Count*2
+        for(int idx=0; idx<Count; ++idx) {
           assertNotNull(u.eventKeys.get("k" + idx));
           // extract the key
           String key = u.eventKeys.get("k" + idx);

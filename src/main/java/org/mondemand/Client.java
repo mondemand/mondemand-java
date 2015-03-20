@@ -554,6 +554,7 @@ public class Client {
       // create the counter if doesn't exist
       realValue = new StatsMessage(realKey, type);
       this.stats.putIfAbsent(realKey, realValue);
+      realValue = this.stats.get(realKey);
     }
     // update the counter
     realValue.incrementBy(value);
