@@ -1003,18 +1003,16 @@ public class ClientTest {
     Context context = new Context("k1", "v1");
     ContextList contexts = new ContextList();
     contexts.addContext(context);
+    Context context2 = new Context("k1", "v2");
+    contexts.addContext(context2);
+
     for (int i=0; i<1000; i++)
     {
       client.increment(contexts, "key1");
       client.increment(contexts, "key2", 100l);
     }
-    Context context2 = new Context("k1", "v2");
-    ContextList contexts2 = new ContextList();
-    contexts.addContext(context2);
-    for (int i=0; i<1000; i++)
-    {
-      client.increment(contexts2, "key1", 10l);
-    }
+
+    client.getContextStats().containsKey(contexts);
     assertTrue(client.getContextStats().containsKey(contexts));
     assertTrue(client.getContextStats().get(contexts).containsKey("key1"));
     assertEquals(1000l, client.getContextStats().get(contexts).get("key1"));
@@ -1022,6 +1020,11 @@ public class ClientTest {
     assertTrue(client.getContextStats().get(contexts).containsKey("key2"));
     assertEquals(100000l, client.getContextStats().get(contexts).get("key2"));
 
+    ContextList contexts2 = new ContextList();
+    for (int i=0; i<1000; i++)
+    {
+      client.increment(contexts2, "key1", 10l);
+    }
     assertTrue(client.getContextStats().containsKey(contexts2));
     assertTrue(client.getContextStats().get(contexts2).containsKey("key1"));
     assertEquals(10000l, client.getContextStats().get(contexts2).get("key1"));

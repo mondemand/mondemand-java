@@ -1,5 +1,8 @@
+Version 5.2.2
+  * fixed the hashcode/equals override in ContextList
+  
 Version 5.2.1
-  * fixing the thread-safe issue
+  * fixed the thread-safe issue
 
 Version 5.2.0
   * added function in client to handle different context stats
