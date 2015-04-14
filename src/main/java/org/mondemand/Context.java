@@ -55,6 +55,11 @@ public class Context implements Serializable {
     value = v;
   }
 
+  public void addContext(Client client)
+  {
+    client.addContext(key, value);
+  }
+
   @Override
   public int hashCode() {
     final int prime = 31;
@@ -86,9 +91,9 @@ public class Context implements Serializable {
     return true;
   }
 
-  public void addContext(Client client)
-  {
-    client.addContext(key, value);
+  @Override
+  public String toString() {
+    return "Context [key=" + key + ", value=" + value + "]";
   }
 
 }
