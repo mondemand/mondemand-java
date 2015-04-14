@@ -1009,7 +1009,7 @@ public class ClientTest {
       client.increment(contexts, "key2", 100l);
     }
     ContextList contextsCopy = new ContextList();
-    contextsCopy.addContext(context);
+    contextsCopy.addContext(new Context("k1", "v1"));
     Context context2 = new Context("k1", "v2");
     ContextList contexts2 = new ContextList();
     contexts2.addContext(context2);
