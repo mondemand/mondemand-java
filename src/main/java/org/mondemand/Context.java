@@ -86,9 +86,9 @@ public class Context implements Serializable {
     return true;
   }
 
-  public void addContext(Client client)
-  {
-    client.addContext(key, value);
+  @Override
+  public String toString() {
+    return "Context [key=" + key + ", value=" + value + "]";
   }
 
 }
