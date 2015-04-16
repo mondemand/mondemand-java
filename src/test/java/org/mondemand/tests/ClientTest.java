@@ -1075,6 +1075,7 @@ public class ClientTest {
     Context context = new Context("k1", "v1");
     ContextList contexts = new ContextList();
     contexts.addContext(context);
+    client.getContextStats().get(contexts).clear();
     for (int i=0; i<1000; i++)
     {
       client.increment(contexts, "key1");
