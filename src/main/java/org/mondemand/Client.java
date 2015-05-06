@@ -1161,7 +1161,10 @@ public class Client {
    */
   private synchronized void dispatchStatsSamples() {
     if(this.transports == null ||
-        (this.samples == null && this.stats == null)) {
+        (this.contexts == null || this.contexts.isEmpty()) ||
+        ( (this.samples == null || this.samples.isEmpty()) &&
+          (this.stats == null || this.stats.isEmpty())))
+    {
       return;
     }
 

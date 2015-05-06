@@ -1,3 +1,6 @@
+Version 5.2.3
+  * Do not emit empty events
+  
 Version 5.2.2
   * Add hashcode and equals to ContextList
 
