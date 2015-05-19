@@ -1,3 +1,6 @@
+Version 5.2.4
+  * Do not emit empty events again
+  
 Version 5.2.3
   * Do not emit empty events
   

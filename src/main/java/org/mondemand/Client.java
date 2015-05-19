@@ -562,7 +562,6 @@ public class Client {
 
   /**
    * Given context&Stats map, increment according to context and key/value
-   * @param contextStats ConcurrentHashMap<Context, AtomicLongMap<String>> contextStats
    * @param context context
    * @param keyType key
    * @param value value
@@ -582,7 +581,7 @@ public class Client {
   /**
    * Increment the count for the map
    * @param context : context
-   * @param key : KeyType: blank, advertiser_revenue, etc
+   * @param keyType : KeyType: blank, advertiser_revenue, etc
    */
   public void increment(ContextList context, String keyType )
   {
@@ -1161,8 +1160,7 @@ public class Client {
    */
   private synchronized void dispatchStatsSamples() {
     if(this.transports == null ||
-       ( (this.contexts == null || this.contexts.isEmpty()) &&
-         (this.samples == null || this.samples.isEmpty()) &&
+        ( (this.samples == null || this.samples.isEmpty()) &&
          (this.stats == null || this.stats.isEmpty())))
     {
       return;
