@@ -534,6 +534,42 @@ public class ClientTest {
       } catch(Exception e) {}
       mondemandConfigFile.deleteOnExit();
 
+      // invalid ttl, not numeric
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"\nMONDEMAND_PORT=\"1234\"\nMONDEMAND_TTL=\"abc\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // invalid ttl, less than min
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"\nMONDEMAND_PORT=\"1234\"\nMONDEMAND_TTL=\"-1\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
+      // invalid ttl, more than max
+      mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
+      output = new FileOutputStream(mondemandConfigFile);
+      output.write("MONDEMAND_ADDR=\"127.0.0.1\"\nMONDEMAND_PORT=\"1234\"\nMONDEMAND_TTL=\"33\"".getBytes());
+      output.close();
+      try {
+        // should throw exception
+        client.addTransportsFromConfigFile(mondemandConfigFile.getAbsolutePath());
+        assertTrue(false);
+      } catch(Exception e) {}
+      mondemandConfigFile.deleteOnExit();
+
       // everything valid
       mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
       output = new FileOutputStream(mondemandConfigFile);
@@ -546,7 +582,7 @@ public class ClientTest {
         allAddresses.append(", ").append(addr);
       }
       output.write( ("MONDEMAND_ADDR=\"" + allAddresses.toString().substring(1)
-          + "\"\nMONDEMAND_PORT=\"1234\"") .getBytes());
+          + "\"\nMONDEMAND_PORT=\"1234\"\nMONDEMAND_TTL=\"10\"") .getBytes());
       output.close();
       try {
         // should throw exception
@@ -569,6 +605,8 @@ public class ClientTest {
           } else {
             address = ((MulticastEventEmitter)emitter.get(t)).getMulticastAddress().getHostAddress();
             port = ((MulticastEventEmitter)emitter.get(t)).getMulticastPort();
+            int ttl = ((MulticastEventEmitter)emitter.get(t)).getTimeToLive();
+            assertEquals(ttl, 10);
           }
           assertEquals(address, addresses.get(cnt++));
           assertEquals(port, 1234);
