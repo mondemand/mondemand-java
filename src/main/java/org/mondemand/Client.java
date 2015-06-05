@@ -383,21 +383,28 @@ public class Client {
    * adds transports from a configuration file. the format of the file is:
    * MONDEMAND_ADDR="ip_addr_1, ip_addr_2, ..."
    * MONDEMAND_PORT="port"
+   * (optional) MONDEMAND_TTL="ttl"
    *
    * @param configFileName - configuration file name.
    * @throws Exception if file does not exist, or if there is a problem reading
    *        the file, or either port or address is missing, or if port cannot
    *        be converted to number, or if addresses cannot be converted to valid
-   *        hosts, or if a transport cannot be created for addresses/port
+   *        hosts, or if ttl cannot be converted to number in valid range,
+   *        or if a transport cannot be created for addresses/port
    *        specified in the file.
    */
   public void addTransportsFromConfigFile(String configFileName)
       throws Exception {
     final String ADDR = "MONDEMAND_ADDR";
     final String PORT = "MONDEMAND_PORT";
+    final String TTL = "MONDEMAND_TTL";
+    final int TTL_DEFAULT = 5;
+    final int TTL_MIN = 0;
+    final int TTL_MAX = 32;
 
     String[] addresses = null;
     Integer port = null;
+    Integer ttl = TTL_DEFAULT;
     Properties prop = new Properties();
     InputStream input = null;
     try {
@@ -413,10 +420,17 @@ public class Client {
       addresses = adr.split(",");
       String p = prop.getProperty(PORT).replace("\"", "");
       port = Integer.parseInt(p);
+      // check for existence of ttl
+      String t = prop.getProperty(TTL);
+      ttl = t != null ? Integer.parseInt(t.replace("\"", "")) : TTL_DEFAULT;
+      if(ttl < TTL_MIN || ttl > TTL_MAX) {
+        throw new Exception( "TTL value specified in the config '" + ttl + "' is " +
+            "outside the valid range of [" + TTL_MIN + "," + TTL_MAX + "]");
+      }
       // add a new transport for each address/port
       for(int cnt=0; cnt<addresses.length; cnt++) {
         addTransport( new LWESTransport(InetAddress.getByName(addresses[cnt]),
-            port.intValue(), null) );
+            port.intValue(), null, ttl) );
       }
     } finally {
       if (input != null) {
