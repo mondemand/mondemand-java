@@ -17,11 +17,11 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.mondemand.transport.LWESTransport;
@@ -49,6 +49,7 @@ public class Client {
   private static final int    EMIT_INTERVAL = 60;   // 60 seconds
   private static final boolean DEFAULT_AUTO_EMIT = false;   // auto emit disabled by default
   private static final boolean DEFAULT_CLEAR_STAT = false;  // clear stats after flush by auto emit
+  private static final int TTL_DEFAULT = 5;
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -62,7 +63,7 @@ public class Client {
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private ConcurrentHashMap<String,SamplesMessage> samples = null;
   private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
-  private Vector<Transport> transports = null;
+  private Hashtable<String, Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
 
@@ -142,7 +143,7 @@ public class Client {
     messages = new ConcurrentHashMap<String,LogMessage>();
     stats = new ConcurrentHashMap<String,StatsMessage>();
     samples = new ConcurrentHashMap<String,SamplesMessage>();
-    transports = new Vector<Transport>();
+    transports = new Hashtable<String, Transport>();
     contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
 
     // create and start the emitter thread
@@ -381,56 +382,45 @@ public class Client {
 
   /**
    * adds transports from a configuration file. the format of the file is:
-   * MONDEMAND_ADDR="ip_addr_1, ip_addr_2, ..."
-   * MONDEMAND_PORT="port"
-   * (optional) MONDEMAND_TTL="ttl"
+   * MONDEMAND_ADDR="<ip>[,<ip>]?"
+   * MONDEMAND_PORT="<port>[,<port>]?"
+   * (optional) MONDEMAND_TTL="<ttl>[,<ttl>]?"
+   * (optional) MONDEMAND_SENDTO="<sendto>"
    *
    * @param configFileName - configuration file name.
    * @throws Exception if file does not exist, or if there is a problem reading
    *        the file, or either port or address is missing, or if port cannot
    *        be converted to number, or if addresses cannot be converted to valid
-   *        hosts, or if ttl cannot be converted to number in valid range,
-   *        or if a transport cannot be created for addresses/port
-   *        specified in the file.
+   *        hosts, or if ttl cannot be converted to number in valid range, or if
+   *        sendto cannot be converted to number in valid range, or if length of
+   *        port or ttl arrays does not equal one or length of addr array, or if
+   *        a transport cannot be created for addresses/port specified in the
+   *        file.
    */
   public void addTransportsFromConfigFile(String configFileName)
       throws Exception {
-    final String ADDR = "MONDEMAND_ADDR";
-    final String PORT = "MONDEMAND_PORT";
-    final String TTL = "MONDEMAND_TTL";
-    final int TTL_DEFAULT = 5;
-    final int TTL_MIN = 0;
-    final int TTL_MAX = 32;
-
-    String[] addresses = null;
-    Integer port = null;
-    Integer ttl = TTL_DEFAULT;
     Properties prop = new Properties();
     InputStream input = null;
+
     try {
       // load a properties file
       input = new FileInputStream(configFileName);
       prop.load(input);
-      // make sure MONDEMAND_ADDR and MONDEMAND_PORT are both present
-      if(prop.getProperty(ADDR) == null || prop.getProperty(PORT) == null) {
-        throw new Exception( ADDR + " and " + PORT + " should be specified in the "
-            + "configuration file " + configFileName);
-      }
-      String adr = prop.getProperty(ADDR).replace("\"", "").replace(" ", "");
-      addresses = adr.split(",");
-      String p = prop.getProperty(PORT).replace("\"", "");
-      port = Integer.parseInt(p);
-      // check for existence of ttl
-      String t = prop.getProperty(TTL);
-      ttl = t != null ? Integer.parseInt(t.replace("\"", "")) : TTL_DEFAULT;
-      if(ttl < TTL_MIN || ttl > TTL_MAX) {
-        throw new Exception( "TTL value specified in the config '" + ttl + "' is " +
-            "outside the valid range of [" + TTL_MIN + "," + TTL_MAX + "]");
-      }
-      // add a new transport for each address/port
-      for(int cnt=0; cnt<addresses.length; cnt++) {
-        addTransport( new LWESTransport(InetAddress.getByName(addresses[cnt]),
-            port.intValue(), null, ttl) );
+
+      // build config defaults first
+      Config defaults = ConfigBuilder.buildDefaultConfig(prop);
+
+      // build event-specific configs
+      for (EventType eventType : EventType.values()) {
+        Config eventSpecific =
+          ConfigBuilder.buildEventSpecificConfig(prop, eventType, defaults);
+
+        EmitterGroup emitterGroup =
+          eventSpecific.toEmitterGroup(eventType.name().toLowerCase());
+
+        // add transport for each event type
+        addTransport(eventType.name().toLowerCase(),
+                     new LWESTransport(emitterGroup));
       }
     } finally {
       if (input != null) {
@@ -447,13 +437,13 @@ public class Client {
    * Adds a new transport to this client.
    * @param transport the transport object to add
    */
-  public synchronized void addTransport(Transport transport) {
+  public synchronized void addTransport(String eventType, Transport transport) {
     if(this.transports == null) {
-      this.transports = new Vector<Transport>();
+      this.transports = new Hashtable<String, Transport>();
     }
 
     if(transport != null) {
-      this.transports.add(transport);
+      this.transports.add(eventType, transport);
     }
   }
 
@@ -1236,5 +1226,4 @@ public class Client {
   public ConcurrentHashMap<String, SamplesMessage> getSamples() {
     return samples;
   }
-
 }
