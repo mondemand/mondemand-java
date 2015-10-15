@@ -12,11 +12,12 @@
 
 package org.mondemand.transport;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Properties;
 
+import org.mondemand.Config;
 import org.mondemand.Context;
 import org.mondemand.LogMessage;
 import org.mondemand.SamplesMessage;
@@ -27,7 +28,10 @@ import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
 import org.lwes.Event;
+import org.lwes.EventFactory;
 import org.lwes.EventSystemException;
+import org.lwes.emitter.EmitterGroup;
+import org.lwes.emitter.EmitterGroupBuilder;
 import org.lwes.emitter.EventEmitter;
 import org.lwes.emitter.MulticastEventEmitter;
 import org.lwes.emitter.UnicastEventEmitter;
@@ -58,12 +62,12 @@ public class LWESTransport
    *                         specify the default
    * @throws TransportException
    */
-  public LWESTransport (InetAddress address,
-                        int port,
-                        InetAddress networkInterface)
+  public LWESTransport(InetAddress address,
+                       int port,
+                       InetAddress networkInterface)
     throws TransportException
   {
-    this(address, port, networkInterface, 1);
+    this(address, port, networkInterface, Config.TTL_DEFAULT);
   }
 
   /**
@@ -76,18 +80,15 @@ public class LWESTransport
    * @param ttl for multicast addresses, the TTL value to use
    * @throws TransportException
    */
-  public LWESTransport (InetAddress address,
-                        int port,
-                        InetAddress networkInterface,
-                        int ttl)
+  public LWESTransport(InetAddress address,
+                       int port,
+                       InetAddress networkInterface,
+                       int ttl)
     throws TransportException
   {
-    if (address == null) return;
-
-    Config config = new Config(address, networkInterface, port, ttl, null);
-    String name = address.getHostAddress();
-
-    this(config.toEmitterGroupProperties(name), name);
+    this(new Config(
+        address, networkInterface, port, ttl, null).toEmitterGroupProperties(
+            address.getHostAddress()), address.getHostAddress());
   }
 
   /**
@@ -150,11 +151,9 @@ public class LWESTransport
       }
 
       // emit the event
-      emitterGroup.emit(logMsg);
+      emitterGroup.emitToGroup(logMsg);
     } catch(EventSystemException e) {
       throw new TransportException("Error sending log event", e);
-    } catch(IOException ie) {
-      throw new TransportException("Error sending log event", ie);
     }
   }
 
@@ -183,7 +182,7 @@ public class LWESTransport
 
     // finally emit the event
     try {
-      emitterGroup.emit(event);
+      emitterGroup.emitToGroup(event);
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
@@ -338,7 +337,7 @@ public class LWESTransport
           traceMsg.setString(contexts[i].getKey(), contexts[i].getValue());
       }
       // emit the event
-      emitterGroup.emit(traceMsg);
+      emitterGroup.emitToGroup(traceMsg);
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
@@ -372,26 +371,26 @@ public class LWESTransport
 
       perfMsg.setString(PERF_ID_KEY, id);
       perfMsg.setString(PERF_CALLER_LABEL_KEY, callerLabel);
-      perfMsg.setString(PERF_NUM_KEY, label.length);
+      perfMsg.setUInt16(PERF_NUM_KEY, label.length);
 
       for (int i = 0; i < label.length; ++i) {
-        perfMsg.setString(PERF_LABEL_PREFIX + i, label);
-        perfMsg.setInt64(PERF_START_PREFIX + i, start);
-        perfMsg.setInt64(PERF_END_PREFIX + i, end);
+        perfMsg.setString(PERF_LABEL_PREFIX + i, label[i]);
+        perfMsg.setInt64(PERF_START_PREFIX + i, start[i]);
+        perfMsg.setInt64(PERF_END_PREFIX + i, end[i]);
       }
 
       // set the contextual data in the event
       if (contexts.length > 0) {
-        event.setUInt16("ctxt_num", contexts.length);
+        perfMsg.setUInt16("ctxt_num", contexts.length);
 
         for (int i = 0; i < contexts.length; ++i) {
-          event.setString("ctxt_k" + i, contexts[i].getKey());
-          event.setString("ctxt_v" + i, contexts[i].getValue());
+          perfMsg.setString("ctxt_k" + i, contexts[i].getKey());
+          perfMsg.setString("ctxt_v" + i, contexts[i].getValue());
         }
       }
 
       // emit the event
-      emitterGroup.emit(perfMsg);
+      emitterGroup.emitToGroup(perfMsg);
     } catch(Exception e) {
       throw new TransportException("Error sending perf event", e);
     }

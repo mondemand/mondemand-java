@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.lwes.emitter.EmitterGroup;
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
 
@@ -49,7 +50,6 @@ public class Client {
   private static final int    EMIT_INTERVAL = 60;   // 60 seconds
   private static final boolean DEFAULT_AUTO_EMIT = false;   // auto emit disabled by default
   private static final boolean DEFAULT_CLEAR_STAT = false;  // clear stats after flush by auto emit
-  private static final int TTL_DEFAULT = 5;
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -63,7 +63,7 @@ public class Client {
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private ConcurrentHashMap<String,SamplesMessage> samples = null;
   private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
-  private Hashtable<String, Transport> transports = null;
+  private Hashtable<EventType, Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
 
@@ -143,7 +143,7 @@ public class Client {
     messages = new ConcurrentHashMap<String,LogMessage>();
     stats = new ConcurrentHashMap<String,StatsMessage>();
     samples = new ConcurrentHashMap<String,SamplesMessage>();
-    transports = new Hashtable<String, Transport>();
+    transports = new Hashtable<EventType, Transport>();
     contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
 
     // create and start the emitter thread
@@ -208,7 +208,7 @@ public class Client {
     flush();
 
     // stop the auto-emit thread
-    if(emitterThread != null) {
+    if (emitterThread != null) {
       try {
         autoStatEmitter.stop();
         emitterThread.interrupt();
@@ -228,10 +228,10 @@ public class Client {
     contextStats.clear();
 
     // shutdown all the transports
-    if(transports != null) {
-      for(int i=0; i<transports.size(); ++i) {
+    if (transports != null) {
+      for (Transport t : transports.values()) {
         try {
-          transports.elementAt(i).shutdown();
+          t.shutdown();
         } catch(TransportException e) {}
       }
     }
@@ -415,12 +415,12 @@ public class Client {
         Config eventSpecific =
           ConfigBuilder.buildEventSpecificConfig(prop, eventType, defaults);
 
-        EmitterGroup emitterGroup =
-          eventSpecific.toEmitterGroup(eventType.name().toLowerCase());
+        Properties emitterGroupProps =
+          eventSpecific.toEmitterGroupProperties(eventType.name());
 
         // add transport for each event type
-        addTransport(eventType.name().toLowerCase(),
-                     new LWESTransport(emitterGroup));
+        addTransport(eventType,
+                     new LWESTransport(emitterGroupProps, eventType.name()));
       }
     } finally {
       if (input != null) {
@@ -437,13 +437,14 @@ public class Client {
    * Adds a new transport to this client.
    * @param transport the transport object to add
    */
-  public synchronized void addTransport(String eventType, Transport transport) {
-    if(this.transports == null) {
-      this.transports = new Hashtable<String, Transport>();
+  public synchronized void addTransport(EventType eventType,
+                                        Transport transport) {
+    if (this.transports == null) {
+      this.transports = new Hashtable<EventType, Transport>();
     }
 
-    if(transport != null) {
-      this.transports.add(eventType, transport);
+    if (transport != null) {
+      this.transports.put(eventType, transport);
     }
   }
 
@@ -1031,13 +1032,12 @@ public class Client {
 
       Context[] contexts = tmp.values().toArray(new Context[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
-        try {
-          t.sendTrace(programId, contexts);
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendTrace()", te);
-        }
+      Transport t = transports.get(EventType.TRACE);
+
+      try {
+        t.sendTrace(programId, contexts);
+      } catch(TransportException te) {
+        errorHandler.handleError("Error calling Transport.sendTrace()", te);
       }
       ret = true;
     } catch(Exception e) {
@@ -1138,19 +1138,18 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchLogs() {
-    if(this.messages == null || this.transports == null) return;
+    if (this.messages == null || this.transports == null) return;
 
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
-        try {
-          t.sendLogs(programId, messages, contexts);
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendLogs()", te);
-        }
+      Transport t = transports.get(EventType.LOG);
+
+      try {
+        t.sendLogs(programId, messages, contexts);
+      } catch(TransportException te) {
+        errorHandler.handleError("Error calling Transport.sendLogs()", te);
       }
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.dispatchLogs()", e);
@@ -1163,8 +1162,8 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchStatsSamples() {
-    if(this.transports == null ||
-        ( (this.samples == null || this.samples.isEmpty()) &&
+    if (this.transports == null ||
+        ((this.samples == null || this.samples.isEmpty()) &&
          (this.stats == null || this.stats.isEmpty())))
     {
       return;
@@ -1175,13 +1174,12 @@ public class Client {
       StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
       SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
-        try {
-          t.send(programId, statsMsgs, samplesMsgs, contexts);
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendStats()", te);
-        }
+      Transport t = transports.get(EventType.STATS);
+
+      try {
+        t.send(programId, statsMsgs, samplesMsgs, contexts);
+      } catch(TransportException te) {
+        errorHandler.handleError("Error calling Transport.sendStats()", te);
       }
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);
@@ -1193,28 +1191,31 @@ public class Client {
    */
   private synchronized void dispatchContextStats()
   {
-    if(this.transports == null ||
-        this.contextStats == null || this.contextStats.isEmpty()) {
+    if (this.transports == null || this.contextStats == null ||
+        this.contextStats.isEmpty()) {
       return;
     }
+
     for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStats.entrySet())
     {
       List<Context> newContexts = new ArrayList<Context>(this.contexts.values());
       newContexts.addAll(entry.getKey().getList());
       List<StatsMessage> statsMsgs = new ArrayList<StatsMessage>();
+
       for (Map.Entry<String, Long> stat : entry.getValue().asMap().entrySet())
       {
         StatsMessage statsMessage = new StatsMessage(stat.getKey(), StatType.Counter);
         statsMessage.incrementBy(stat.getValue().intValue());
         statsMsgs.add(statsMessage);
       }
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
-        try {
-          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null, newContexts.toArray(new Context[0]));
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendStats()", te);
-        }
+
+      Transport t = transports.get(EventType.STATS);
+
+      try {
+        t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
+               newContexts.toArray(new Context[0]));
+      } catch(TransportException te) {
+        errorHandler.handleError("Error calling Transport.sendStats()", te);
       }
     }
   }
