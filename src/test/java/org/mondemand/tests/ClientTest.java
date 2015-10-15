@@ -80,7 +80,7 @@ public class ClientTest {
      * @param event - the lwes event to be inspected
      */
     @Override
-    public void emit(Event event) throws IOException, EventSystemException {
+    public int emit(Event event) throws IOException, EventSystemException {
       // go through the event and populate the maps with the entries in the event
       // that start with "t", "k" or "v"
       MapEvent me = (MapEvent)event;
@@ -93,6 +93,8 @@ public class ClientTest {
           eventValues.put(key, me.getInt64(key));
         }
       }
+
+      return 0;
     }
 
     public void clearMaps() {

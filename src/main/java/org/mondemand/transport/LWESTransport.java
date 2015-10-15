@@ -50,7 +50,6 @@ public class LWESTransport
   /***********************
    * Instance attributes *
    ***********************/
-  private EventFactory eventFactory = new EventFactory();
   private EmitterGroup emitterGroup = null;
 
   /**
@@ -102,7 +101,8 @@ public class LWESTransport
   {
     try {
       emitterGroup =
-        EmitterGroupBuilder.createGroup(emitterGroupProps, emitterGroupName);
+        EmitterGroupBuilder.createGroup(emitterGroupProps, emitterGroupName,
+                                        new EventFactory());
     } catch (Exception e) {
       throw new TransportException("Unable to inialize emitter group", e);
     }
@@ -118,7 +118,7 @@ public class LWESTransport
 
     try {
       // create the event and set parameters
-      Event logMsg = eventFactory.createEvent(LOG_EVENT, false);
+      Event logMsg = emitterGroup.createEvent(LOG_EVENT, false);
       logMsg.setString("prog_id", programId);
       logMsg.setUInt16("num", messages.length);
 
@@ -169,7 +169,7 @@ public class LWESTransport
       SamplesMessage[] samples, Context[] contexts) throws TransportException {
 
     // create the event
-    Event event = eventFactory.createEvent(STATS_EVENT, false);
+    Event event = emitterGroup.createEvent(STATS_EVENT, false);
     event.setString("prog_id", programId);
 
     // keeps the number of attributes that are being added to the event when
@@ -328,7 +328,7 @@ public class LWESTransport
       return;
 
     try {
-      Event traceMsg = eventFactory.createEvent(TRACE_EVENT, false);
+      Event traceMsg = emitterGroup.createEvent(TRACE_EVENT, false);
       traceMsg.setString(PROG_ID_KEY, programId);
       String hostName = InetAddress.getLocalHost ().getHostName ();
       traceMsg.setString(SRC_HOST_KEY, hostName);
@@ -367,7 +367,7 @@ public class LWESTransport
     }
 
     try {
-      Event perfMsg = eventFactory.createEvent(PERF_EVENT, false);
+      Event perfMsg = emitterGroup.createEvent(PERF_EVENT, false);
 
       perfMsg.setString(PERF_ID_KEY, id);
       perfMsg.setString(PERF_CALLER_LABEL_KEY, callerLabel);
