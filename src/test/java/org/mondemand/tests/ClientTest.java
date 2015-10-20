@@ -42,14 +42,18 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.lwes.Event;
+import org.lwes.EventFactory;
 import org.lwes.EventSystemException;
 import org.lwes.MapEvent;
+import org.lwes.emitter.BroadcastEmitterGroup;
+import org.lwes.emitter.DatagramSocketEventEmitter;
 import org.lwes.emitter.MulticastEventEmitter;
 import org.lwes.emitter.UnicastEventEmitter;
 import org.mondemand.Client;
 import org.mondemand.Context;
 import org.mondemand.ContextList;
 import org.mondemand.ErrorHandler;
+import org.mondemand.EventType;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
 import org.mondemand.SampleTrackType;
@@ -65,12 +69,17 @@ import org.mondemand.transport.StderrTransport;
 import org.mondemand.util.ClassUtils;
 
 public class ClientTest {
-  // stub unicast emitter for LwesTransport
-  class StubUnicastEventEmitter extends UnicastEventEmitter {
+  // stub emitter group for LwesTransport
+  class StubEmitterGroup extends BroadcastEmitterGroup {
 
     public Map<String, String> eventTypes = new HashMap<String, String>();
     public Map<String, String> eventKeys = new HashMap<String, String>();
     public Map<String, Long> eventValues = new HashMap<String, Long>();
+
+    public StubEmitterGroup(DatagramSocketEventEmitter<?>[] emitters,
+                            EventFactory eventFactory) {
+      super(emitters, null, eventFactory);
+    }
 
     /**
      * during emit, all we do is to capture the type/key/values we put in the
@@ -80,7 +89,7 @@ public class ClientTest {
      * @param event - the lwes event to be inspected
      */
     @Override
-    public int emit(Event event) throws IOException, EventSystemException {
+    public int emitToGroup(Event event) {
       // go through the event and populate the maps with the entries in the event
       // that start with "t", "k" or "v"
       MapEvent me = (MapEvent)event;
@@ -262,12 +271,17 @@ public class ClientTest {
     Client client = new Client("ClientTestSample");
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
     client.addTransport(localLwesTransport);
-    Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
-    emitter.setAccessible(true);
-    StubUnicastEventEmitter u = new StubUnicastEventEmitter();
-    u.setAddress(InetAddress.getLocalHost());
-    u.setPort(9292);
-    emitter.set(localLwesTransport, u);
+    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
+    emitterGroup.setAccessible(true);
+    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
+    emitters.setAccessible(true);
+    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
+    eventFactory.setAccessible(true);
+    StubEmitterGroup g =
+       new StubEmitterGroup(
+           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
+           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
+    emitterGroup.set(localLwesTransport, g);
     Field sampleStats = client.getClass().getDeclaredField("samples");
     sampleStats.setAccessible(true);
 
@@ -344,18 +358,18 @@ public class ClientTest {
           // we check something like "t1=gauge", "k1=SomeKey_0_min", "v1=10",
           // "t2=gauge", "k2=SomeKey_0_pctl_95", "v2=9500", all extra stats
           // are gauges
-          assertEquals(u.eventTypes.get("t" + idx), "gauge");
-          assertEquals(u.eventKeys.get("k" + idx), key + trackType.keySuffix);
+          assertEquals(g.eventTypes.get("t" + idx), "gauge");
+          assertEquals(g.eventKeys.get("k" + idx), key + trackType.keySuffix);
 
           if(trackType.value == SampleTrackType.AVG.value) {
-            assertEquals(u.eventValues.get("v" + idx).longValue(),
+            assertEquals(g.eventValues.get("v" + idx).longValue(),
                 (long)(total/inputSize));
           } else if(trackType.value == SampleTrackType.SUM.value) {
-            assertEquals(u.eventValues.get("v" + idx).longValue(), total);
+            assertEquals(g.eventValues.get("v" + idx).longValue(), total);
           } else if(trackType.value == SampleTrackType.COUNT.value) {
-            assertEquals(u.eventValues.get("v" + idx).longValue(), inputSize);
+            assertEquals(g.eventValues.get("v" + idx).longValue(), inputSize);
           } else {
-            assertEquals(u.eventValues.get("v" + idx).longValue(),
+            assertEquals(g.eventValues.get("v" + idx).longValue(),
                 samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
                     trackType.indexInSamples)).intValue()  );
           }
@@ -363,12 +377,12 @@ public class ClientTest {
         }
       }
       // finally make sure no other key/value/types are set.
-      assertNull(u.eventTypes.get("t" + idx));
-      assertNull(u.eventKeys.get("t" + idx));
-      assertNull(u.eventValues.get("t" + idx));
+      assertNull(g.eventTypes.get("t" + idx));
+      assertNull(g.eventKeys.get("t" + idx));
+      assertNull(g.eventValues.get("t" + idx));
 
       // reset emitter
-      u.clearMaps();
+      g.clearMaps();
     }
     client.finalize();
   }
@@ -385,12 +399,17 @@ public class ClientTest {
       Client client = new Client("ClientTestSample", true, keepOrDropStats[kods], 1);
       LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
       client.addTransport(localLwesTransport);
-      Field emitter = localLwesTransport.getClass().getDeclaredField("emitter");
-      emitter.setAccessible(true);
-      StubUnicastEventEmitter u = new StubUnicastEventEmitter();
-      u.setAddress(InetAddress.getLocalHost());
-      u.setPort(9292);
-      emitter.set(localLwesTransport, u);
+      Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
+      emitterGroup.setAccessible(true);
+      Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
+      emitters.setAccessible(true);
+      Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
+      eventFactory.setAccessible(true);
+      StubEmitterGroup g =
+         new StubEmitterGroup(
+             (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
+             (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
+      emitterGroup.set(localLwesTransport, g);
 
       // create a bunch of regular counter stats
       int Count = 100;
@@ -406,63 +425,63 @@ public class ClientTest {
 
       // make sure Count*2 number of type/key/values are emitted, one for regular
       // counter,  and one for avg value of the samples.
-      assertEquals(u.eventTypes.size(), Count*2);
-      assertEquals(u.eventKeys.size(), Count*2);
-      assertEquals(u.eventValues.size(), Count*2);
+      assertEquals(g.eventTypes.size(), Count*2);
+      assertEquals(g.eventKeys.size(), Count*2);
+      assertEquals(g.eventValues.size(), Count*2);
 
       // now check the type/key/values in the emitter object
       for(int idx=0; idx<Count*2; ++idx) {
-        assertNotNull(u.eventKeys.get("k" + idx));
+        assertNotNull(g.eventKeys.get("k" + idx));
         // extract the key
-        String key = u.eventKeys.get("k" + idx);
+        String key = g.eventKeys.get("k" + idx);
         int val = 0;
         if(key.startsWith("key_")) {
           // regular key
-          assertEquals(u.eventTypes.get("t" + idx), "counter");
+          assertEquals(g.eventTypes.get("t" + idx), "counter");
           val = Integer.parseInt(key.substring( "key_".length() ));
         } else if(key.startsWith("samplekey_")) {
           // average for sample key
-          assertEquals(u.eventTypes.get("t" + idx), "gauge");
+          assertEquals(g.eventTypes.get("t" + idx), "gauge");
           String s = key.substring( "samplekey_".length() );
           val = Integer.parseInt(s.substring(0, s.indexOf("_avg")));
         } else {
           // should never happen.
           assertNotNull(null);
         }
-        assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+        assertEquals(g.eventValues.get("v" + idx).longValue(), val);
       }
 
-      u.clearMaps();
+      g.clearMaps();
 
       // now sleep for 1.2 sec without emiting anything
       Thread.sleep(1200);
       if(keepOrDropStats[kods]) {
         // we are reseting all stats, there should not be anything emitted
-        assertEquals(u.eventTypes.size(), 0);
-        assertEquals(u.eventKeys.size(), 0);
-        assertEquals(u.eventValues.size(), 0);
+        assertEquals(g.eventTypes.size(), 0);
+        assertEquals(g.eventKeys.size(), 0);
+        assertEquals(g.eventValues.size(), 0);
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
         // the value for averages for sample counter should be 0 since average is a gauge
         // sample is cleared therefore we any got to Count not Count*2
         for(int idx=0; idx<Count; ++idx) {
-          assertNotNull(u.eventKeys.get("k" + idx));
+          assertNotNull(g.eventKeys.get("k" + idx));
           // extract the key
-          String key = u.eventKeys.get("k" + idx);
+          String key = g.eventKeys.get("k" + idx);
           int val = 0;
           if(key.startsWith("key_")) {
             // regular key
-            assertEquals(u.eventTypes.get("t" + idx), "counter");
+            assertEquals(g.eventTypes.get("t" + idx), "counter");
             val = Integer.parseInt(key.substring( "key_".length() ));
           } else if(key.startsWith("samplekey_")) {
             // average for sample key, should be reset to 0
-            assertEquals(u.eventTypes.get("t" + idx), "gauge");
+            assertEquals(g.eventTypes.get("t" + idx), "gauge");
             val = 0;
           } else {
             // should never happen.
             assertNotNull(null);
           }
-          assertEquals(u.eventValues.get("v" + idx).longValue(), val);
+          assertEquals(g.eventValues.get("v" + idx).longValue(), val);
         }
       }
 
@@ -594,24 +613,30 @@ public class ClientTest {
         transports.setAccessible(true);
         @SuppressWarnings("unchecked")
         Vector<Transport> clientTransports = (Vector<Transport>)transports.get(client);
-        assertEquals(addresses.size(), clientTransports.size());
-        int cnt = 0;
+        assertEquals(clientTransports.size(), EventType.values().length);
         for(Transport t: clientTransports) {
-          Field emitter = t.getClass().getDeclaredField("emitter");
-          emitter.setAccessible(true);
+          int cnt = 0;
+          Field emitterGroup = t.getClass().getDeclaredField("emitterGroup");
+          emitterGroup.setAccessible(true);
+          Field emitters = emitterGroup.get(t).getClass().getDeclaredField("emitters");
+          emitters.setAccessible(true);
           String address;
           int port;
-          if (emitter.get(t) instanceof UnicastEventEmitter) {
-            address = ((UnicastEventEmitter)emitter.get(t)).getAddress().getHostAddress();
-            port = ((UnicastEventEmitter)emitter.get(t)).getPort();
-          } else {
-            address = ((MulticastEventEmitter)emitter.get(t)).getMulticastAddress().getHostAddress();
-            port = ((MulticastEventEmitter)emitter.get(t)).getMulticastPort();
-            int ttl = ((MulticastEventEmitter)emitter.get(t)).getTimeToLive();
-            assertEquals(ttl, 10);
+          DatagramSocketEventEmitter<?>[] dsee_arr =
+            (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(t));
+          for (DatagramSocketEventEmitter<?> dsee : dsee_arr) {
+            if (dsee instanceof UnicastEventEmitter) {
+              address = ((UnicastEventEmitter)dsee).getAddress().getHostAddress();
+              port = ((UnicastEventEmitter)dsee).getPort();
+            } else {
+              address = ((MulticastEventEmitter)dsee).getMulticastAddress().getHostAddress();
+              port = ((MulticastEventEmitter)dsee).getMulticastPort();
+              int ttl = ((MulticastEventEmitter)dsee).getTimeToLive();
+              assertEquals(ttl, 10);
+            }
+            assertEquals(address, addresses.get(cnt++));
+            assertEquals(port, 1234);
           }
-          assertEquals(address, addresses.get(cnt++));
-          assertEquals(port, 1234);
         }
       } catch(Exception e) {
         // should not throw exception
@@ -737,15 +762,9 @@ public class ClientTest {
     public void testLwesTransport() throws Exception {
       client.addContext("test1", "test2");
 
-      new LWESTransport(null, 0, null);
-
       InetAddress address = InetAddress.getLocalHost();
       Transport t = new LWESTransport(address, 9191, null);
       client.addTransport(t);
-
-
-      Transport t2 = new LWESTransport(InetAddress.getLocalHost(), -1, null);
-      client.addTransport(t2);
 
       new LWESTransport(InetAddress.getByName("224.1.1.111"), 80, null, 100);
 
@@ -782,10 +801,6 @@ public class ClientTest {
 
       t.sendLogs(null, null, null);
       t.send(null, null, null, null);
-      t.shutdown();
-
-      client.flushLogs();
-      client.flush();
       t.shutdown();
     }
 

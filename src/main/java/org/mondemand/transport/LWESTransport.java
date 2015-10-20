@@ -104,7 +104,7 @@ public class LWESTransport
         EmitterGroupBuilder.createGroup(emitterGroupProps, emitterGroupName,
                                         new EventFactory());
     } catch (Exception e) {
-      throw new TransportException("Unable to inialize emitter group", e);
+      throw new TransportException("Unable to initialize emitter group", e);
     }
   }
 
