@@ -13,18 +13,21 @@
 package org.mondemand;
 
 public interface Transport {
-  public void sendLogs (String programId,
-                        LogMessage[] messages,
-                        Context[] contexts)
+  public void sendLogs(String programId, LogMessage[] messages,
+                       Context[] contexts)
     throws TransportException;
-  public void send (String programId,
-                    StatsMessage[] stats,
-                    SamplesMessage[] samples,
-                    Context[] contexts)
+
+  public void send(String programId, StatsMessage[] stats,
+                   SamplesMessage[] samples, Context[] contexts)
     throws TransportException;
-  public void sendTrace (String programId,
-                         Context[] contexts)
+
+  public void sendTrace(String programId, Context[] contexts)
     throws TransportException;
-  public void shutdown()
+
+  public void sendPerformanceTrace(String id, String callerLabel,
+                                   String[] label, long[] start,
+                                   long[] end, Context[] contexts)
     throws TransportException;
+
+  public void shutdown() throws TransportException;
 }

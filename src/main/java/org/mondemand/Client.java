@@ -1045,6 +1045,36 @@ public class Client {
     return ret;
   }
 
+  public boolean performanceTraceMessage(String id, String callerLabel,
+                                         String[] label, long[] start,
+                                         long[] end,
+                                         Map<String, String> context) {
+    boolean ret = false;
+
+    try {
+      List<Context> contextList = new ArrayList<Context>();
+
+      for (Entry<String,String> entry : context.entrySet()) {
+        contextList.add(new Context(entry.getKey(), entry.getValue()));
+      }
+
+      for (Transport t : transports) {
+        try {
+          t.sendPerformanceTrace(id, callerLabel, label, start, end,
+                                 contextList.toArray(new Context[0]));
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendTrace()", te);
+        }
+      }
+
+      ret = true;
+    } catch (Exception e) {
+      errorHandler.handleError("Error calling Client.performanceTraceMessage()", e);
+    }
+
+    return ret;
+  }
+
   /********************************
    * PRIVATE API METHODS          *
    ********************************/
