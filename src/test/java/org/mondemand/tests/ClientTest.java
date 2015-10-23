@@ -74,6 +74,7 @@ public class ClientTest {
     public Map<String, String> eventTypes = new HashMap<String, String>();
     public Map<String, String> eventKeys = new HashMap<String, String>();
     public Map<String, Long> eventValues = new HashMap<String, Long>();
+    public Map<String, Object> others = new HashMap<String, Object>();
 
     public StubEmitterGroup(DatagramSocketEventEmitter<?>[] emitters,
                             EventFactory eventFactory) {
@@ -99,6 +100,8 @@ public class ClientTest {
           eventKeys.put(key, me.getString(key));
         } else if (key.startsWith("v")) {
           eventValues.put(key, me.getInt64(key));
+        } else {
+          others.put(key, me.get(key));
         }
       }
 
@@ -109,6 +112,7 @@ public class ClientTest {
       eventTypes.clear();
       eventKeys.clear();
       eventValues.clear();
+      others.clear();
     }
   }
 
@@ -253,6 +257,52 @@ public class ClientTest {
     client.removeAllContexts();
 
     assertNull(client.getContext("key1"));
+  }
+
+  @Test
+  public void testPerformanceTrace() throws Exception {
+    Client client = createClientNoTransports();
+    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
+    emitterGroup.setAccessible(true);
+    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
+    emitters.setAccessible(true);
+    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
+    eventFactory.setAccessible(true);
+    StubEmitterGroup g =
+       new StubEmitterGroup(
+           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
+           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
+    emitterGroup.set(localLwesTransport, g);
+    long now = System.currentTimeMillis();
+    long start0 = now;
+    long start1 = now - 1000;
+    long end0 = now + 5000;
+    long end1 = now + 10000;
+    Map<String, String> context = new HashMap<String, String>();
+
+    context.put("context_test_key", "context_test_val");
+
+    boolean ret = client.performanceTraceMessage("mondemand-java", "junit",
+                                                 new String[]{ "a", "b" },
+                                                 new long[]{ start0, start1 },
+                                                 new long[]{ end0, end1 },
+                                                 context);
+
+    assertTrue(ret);
+    assertEquals(g.others.get("id"), "mondemand-java");
+    assertEquals(g.others.get("caller_label"), "junit");
+    assertEquals(g.others.get("num"), 2);
+    assertEquals(g.others.get("label0"), "a");
+    assertEquals(g.others.get("label1"), "b");
+    assertEquals(g.others.get("ctxt_num"), 1);
+    assertEquals(g.others.get("ctxt_k0"), "context_test_key");
+    assertEquals(g.others.get("ctxt_v0"), "context_test_val");
+    assertEquals(g.others.get("start0"), start0);
+    assertEquals(g.others.get("start1"), start1);
+    assertEquals(g.others.get("end0"), end0);
+    assertEquals(g.others.get("end1"), end1);
   }
 
   /**
@@ -1038,6 +1088,15 @@ public class ClientTest {
     }
 
     @Override
+    public void sendPerformanceTrace(String id, String callerLabel,
+                                     String[] label, long[] start,
+                                     long[] end, Context[] contexts)
+      throws TransportException
+    {
+      /* FIXME: do something here? */
+    }
+
+    @Override
     public void shutdown() {
 
     }
@@ -1066,6 +1125,15 @@ public class ClientTest {
     @Override
     public void sendTrace (String programId,
                            Context[] contexts)
+      throws TransportException
+    {
+      throw new TransportException("BogusTransport");
+    }
+
+    @Override
+    public void sendPerformanceTrace(String id, String callerLabel,
+                                     String[] label, long[] start,
+                                     long[] end, Context[] contexts)
       throws TransportException
     {
       throw new TransportException("BogusTransport");
