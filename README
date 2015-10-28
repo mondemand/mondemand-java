@@ -3,10 +3,9 @@ This is the Java API for MonDemand.
 Build
 -----
 
-    % mvn package
+    % mvn clean package
 
 Release
 -------
 
-    % mvn --batch-mode release:prepare release:perform
-
+    % mvn clean deploy -P release
