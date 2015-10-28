@@ -127,6 +127,20 @@ public class StderrTransport implements Transport {
     }
   }
 
+  public void sendPerformanceTrace(String id, String callerLabel,
+                                   String[] label, long[] start,
+                                   long[] end, Context[] contexts)
+  {
+    for (int i = 0; i < label.length; ++i) {
+      System.err.println("[" + id + "] [" + callerLabel + "] " +
+                         label[i] + " : " + start[i] + " : " + end[i]);
+    }
+
+    for (int i = 0; i < contexts.length; ++i) {
+      System.err.println(contexts[i].getKey() + " = " + contexts[i].getValue());
+    }
+  }
+
   public void shutdown() {
     // do nothing
   }
