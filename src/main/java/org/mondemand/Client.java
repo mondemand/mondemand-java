@@ -1045,6 +1045,18 @@ public class Client {
     return ret;
   }
 
+  /**
+   * Send a performance trace message.
+   * @see <a href="https://github.com/mondemand/mondemand.github.com/blob/master/performance_monitoring.md">Performance Monitoring</a>
+   * @param id the performance trace id
+   * @param callerLabel the label of the caller, used to give a directed graph
+   *                    of performance timings
+   * @param label an array of service labels, should equal length of start and
+   *              end arrays
+   * @param start an array of start times
+   * @param end an array of end times
+   * @param context a map of contextual metadata
+   */
   public boolean performanceTraceMessage(String id, String callerLabel,
                                          String[] label, long[] start,
                                          long[] end,
@@ -1058,10 +1070,11 @@ public class Client {
         contextList.add(new Context(entry.getKey(), entry.getValue()));
       }
 
+      Context[] contexts = contextList.toArray(new Context[0]);
+
       for (Transport t : transports) {
         try {
-          t.sendPerformanceTrace(id, callerLabel, label, start, end,
-                                 contextList.toArray(new Context[0]));
+          t.sendPerformanceTrace(id, callerLabel, label, start, end, contexts);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
@@ -1237,10 +1250,12 @@ public class Client {
         statsMsgs.add(statsMessage);
       }
 
+      Context[] contexts = newContexts.toArray(new Context[0]);
+
       for (Transport t : transports) {
         try {
           t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
-                 newContexts.toArray(new Context[0]));
+                 contexts);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
