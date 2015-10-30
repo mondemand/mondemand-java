@@ -1,5 +1,5 @@
 Version 5.4.0
-  * added support for performance trace event
+  * added support for performance trace event and more flexible configs
 
 Version 5.3.0
   * added support for including ttl in the config file
