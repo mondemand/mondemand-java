@@ -358,12 +358,13 @@ public class LWESTransport
     if (id == null || callerLabel == null || label == null || start == null ||
         end == null || contexts == null)
     {
-      return;
+      throw new IllegalArgumentException("missing required argument");
     }
 
     if (label.length != start.length || label.length != end.length)
     {
-      return;
+      throw new IllegalArgumentException("label, start, and end arrays must " +
+                                         "all be of equal length");
     }
 
     try {

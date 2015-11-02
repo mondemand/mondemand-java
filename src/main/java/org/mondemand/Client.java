@@ -13,8 +13,11 @@
 package org.mondemand;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -369,13 +372,23 @@ public class Client {
   /**
    * adds transports from the default configuration file
    * at "/etc/mondemand/mondemand.conf"
-   * @throws Exception if default config file does not exist, or if there is a problem
-   *        reading the file, or if port cannot be converted to number, or if addresses
-   *        cannot be converted to valid hosts, or if a transport cannot be created
-   *        from addresses/port specified in the file.
+   * @throws FileNotFoundException if config file could not be found
+   * @throws IOException if config file could not be read
+   * @throws TransportException if there was an error creating the LWESTransport
+   * @throws UnknownHostException if a bad host is specified
+   * @throws IllegalArgumentException if default config file does not exist,
+   *        or if there is a problem reading the file, or either port or
+   *        address is missing, or if port cannot be converted to number, or if
+   *        addresses cannot be converted to valid hosts, or if ttl cannot be
+   *        converted to number in valid range, or if sendto cannot be converted
+   *        to number in valid range, or if length of port or ttl arrays does
+   *        not equal one or length of addr array, or if a transport cannot be
+   *        created for addresses/port specified in the file.
+   * @throws NumberFormatException if a bad PORT, TTL, or SENDTO is specified
    */
   public void addTransportsFromDefaultConfigFile()
-      throws Exception {
+      throws FileNotFoundException, IOException, TransportException,
+             UnknownHostException {
     this.addTransportsFromConfigFile(CONFIG_FILE);
   }
 
@@ -387,17 +400,23 @@ public class Client {
    * (optional) MONDEMAND_SENDTO="<sendto>"
    *
    * @param configFileName - configuration file name.
-   * @throws Exception if file does not exist, or if there is a problem reading
-   *        the file, or either port or address is missing, or if port cannot
-   *        be converted to number, or if addresses cannot be converted to valid
-   *        hosts, or if ttl cannot be converted to number in valid range, or if
-   *        sendto cannot be converted to number in valid range, or if length of
-   *        port or ttl arrays does not equal one or length of addr array, or if
-   *        a transport cannot be created for addresses/port specified in the
-   *        file.
+   * @throws FileNotFoundException if config file could not be found
+   * @throws IOException if config file could not be read
+   * @throws TransportException if there was an error creating the LWESTransport
+   * @throws UknownHostException if a bad host is specified
+   * @throws IllegalArgumentException if file does not exist, or if there is a
+   *        problem reading the file, or either port or address is missing, or
+   *        if port cannot be converted to number, or if addresses cannot be
+   *        converted to valid hosts, or if ttl cannot be converted to number in
+   *        valid range, or if sendto cannot be converted to number in valid
+   *        range, or if length of port or ttl arrays does not equal one or
+   *        length of addr array, or if a transport cannot be created for
+   *        addresses/port specified in the file.
+   * @throws NumberFormatException if a bad PORT, TTL, or SENDTO is specified
    */
   public void addTransportsFromConfigFile(String configFileName)
-      throws Exception {
+      throws FileNotFoundException, IOException, TransportException,
+             UnknownHostException {
     Properties prop = new Properties();
     InputStream input = null;
 

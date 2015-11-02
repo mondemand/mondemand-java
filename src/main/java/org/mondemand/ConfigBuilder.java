@@ -1,6 +1,7 @@
 package org.mondemand;
 
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -13,36 +14,50 @@ public class ConfigBuilder {
   private static final int TTL_MIN = 0;
   private static final int TTL_MAX = 32;
 
-  public static Config buildDefaultConfig(Properties props) throws Exception {
+  public static Config buildDefaultConfig(Properties props)
+      throws UnknownHostException {
     return buildEventSpecificConfig(props, null, null);
   }
 
+  /**
+   * builds an EventSpecificConfig object.
+   *
+   * @param props properties from config file
+   * @param eventType the type of EventSpecificConfig to be built
+   * @param defaults the default config object
+   * @throws UnknownHostException
+   * @throws IllegalArgumentException
+   * @throws NumberFormatException
+   */
   public static EventSpecificConfig buildEventSpecificConfig(Properties props,
                                                              EventType eventType,
                                                              Config defaults)
-      throws Exception {
+      throws UnknownHostException {
     List<InetAddress> addresses = getAddresses(props, eventType, defaults);
     List<Integer> ports = getPorts(props, eventType, defaults);
     List<Integer> ttls = getTtls(props, eventType, defaults);
     Integer sendTo = getSendTo(props, eventType, defaults);
 
     if (addresses == null || ports == null) {
-      throw new Exception("ADDR and PORT must be specified");
+      throw new IllegalArgumentException("ADDR and PORT must be specified");
     }
 
     if (ports.size() != 1 && ports.size() != addresses.size()) {
-        throw new Exception("PORT list length should equal one or ADDR length");
+        throw new IllegalArgumentException("PORT list length should equal " +
+                                           "one or ADDR length");
     }
 
     if (ttls != null) {
       if (ttls.size() != 1 && ttls.size() != addresses.size()) {
-        throw new Exception("TTL list length should equal one or ADDR length");
+        throw new IllegalArgumentException("TTL list length should equal " +
+                                           "one or ADDR length");
       }
     }
 
     if (sendTo != null && (sendTo < 1 || sendTo > addresses.size())) {
-      throw new Exception("SENDTO value is outside the valid range of [1," +
-                          addresses.size() + "]");
+      throw new IllegalArgumentException("SENDTO value is outside the valid " +
+                                         "range of [1," + addresses.size() +
+                                         "]");
     }
 
     return new EventSpecificConfig(eventType, addresses, ports, ttls,sendTo);
@@ -63,7 +78,7 @@ public class ConfigBuilder {
   private static List<InetAddress> getAddresses(Properties props,
                                                 EventType eventType,
                                                 Config defaults)
-      throws Exception {
+      throws UnknownHostException {
     String addr_config = String.format(ADDR_FORMAT,
                                        getConfigFragment(eventType));
 
@@ -113,8 +128,7 @@ public class ConfigBuilder {
 
   private static List<Integer> getTtls(Properties props,
                                        EventType eventType,
-                                       Config defaults)
-      throws Exception {
+                                       Config defaults) {
     String ttl_config = String.format(TTL_FORMAT,
                                       getConfigFragment(eventType));
 
@@ -134,9 +148,11 @@ public class ConfigBuilder {
       int ttl = Integer.parseInt(ttl_arr[i]);
 
       if (ttl < TTL_MIN || ttl > TTL_MAX) {
-        throw new Exception("TTL value specified in the config '" + ttl_config +
-                            "' is outside the valid range of [" + TTL_MIN +
-                            "," + TTL_MAX + "]");
+        throw new IllegalArgumentException("TTL value specified in the " +
+                                           "config '" + ttl_config +
+                                           "' is outside the valid " +
+                                           "range of [" + TTL_MIN +
+                                           "," + TTL_MAX + "]");
       }
 
       ttls.add(Integer.parseInt(ttl_arr[i]));
