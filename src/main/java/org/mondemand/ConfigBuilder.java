@@ -14,13 +14,22 @@ public class ConfigBuilder {
   private static final int TTL_MIN = 0;
   private static final int TTL_MAX = 32;
 
+  /**
+   * builds a Config object using default properties.
+   *
+   * @param props properties from config file
+   * @throws UnknownHostException
+   * @throws IllegalArgumentException
+   * @throws NumberFormatException
+   */
   public static Config buildDefaultConfig(Properties props)
       throws UnknownHostException {
     return buildEventSpecificConfig(props, null, null);
   }
 
   /**
-   * builds an EventSpecificConfig object.
+   * builds an EventSpecificConfig object using event-specific properties when
+   * specified.
    *
    * @param props properties from config file
    * @param eventType the type of EventSpecificConfig to be built
