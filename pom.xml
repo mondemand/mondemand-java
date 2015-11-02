@@ -4,9 +4,21 @@
   <groupId>org.mondemand</groupId>
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
-  <name>mondemand-java</name>
-  <url>http://mondemand.org</url>
   <version>5.4.0</version>
+  <name>mondemand-java</name>
+  <description>MonDemand java implementation</description>
+  <url>http://mondemand.org</url>
+  <organization>
+    <name>MonDemand</name>
+  </organization>
+
+  <licenses>
+    <license>
+      <name>BSD</name>
+      <url>https://github.com/mondemand/mondemand-java/blob/master/LICENSE</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -17,6 +29,14 @@
     <developerConnection>scm:git:git@github.com:mondemand/mondemand-java.git</developerConnection>
     <url>https://github.com/mondemand/mondemand-java</url>
   </scm>
+
+  <developers>
+    <developer>
+      <id>mondemand-team</id>
+      <name>MonDemand Development Team</name>
+      <url>https://github.com/mondemand</url>
+    </developer>
+  </developers>
 
   <dependencies>
     <dependency>
