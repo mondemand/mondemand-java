@@ -12,11 +12,12 @@
 
 package org.mondemand.transport;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Properties;
 
+import org.mondemand.Config;
 import org.mondemand.Context;
 import org.mondemand.LogMessage;
 import org.mondemand.SamplesMessage;
@@ -27,7 +28,10 @@ import org.mondemand.TraceId;
 import org.mondemand.Transport;
 import org.mondemand.TransportException;
 import org.lwes.Event;
+import org.lwes.EventFactory;
 import org.lwes.EventSystemException;
+import org.lwes.emitter.EmitterGroup;
+import org.lwes.emitter.EmitterGroupBuilder;
 import org.lwes.emitter.EventEmitter;
 import org.lwes.emitter.MulticastEventEmitter;
 import org.lwes.emitter.UnicastEventEmitter;
@@ -39,13 +43,14 @@ public class LWESTransport
    * Constants        *
    ********************/
   private static final String LOG_EVENT   = "MonDemand::LogMsg";
+  private static final String PERF_EVENT  = "MonDemand::PerfMsg";
   private static final String STATS_EVENT = "MonDemand::StatsMsg";
   private static final String TRACE_EVENT = "MonDemand::TraceMsg";
 
   /***********************
    * Instance attributes *
    ***********************/
-  private EventEmitter emitter = null;
+  private EmitterGroup emitterGroup = null;
 
   /**
    * Creates an initializes a LWES transport.
@@ -56,12 +61,12 @@ public class LWESTransport
    *                         specify the default
    * @throws TransportException
    */
-  public LWESTransport (InetAddress address,
-                        int port,
-                        InetAddress networkInterface)
+  public LWESTransport(InetAddress address,
+                       int port,
+                       InetAddress networkInterface)
     throws TransportException
   {
-    this(address, port, networkInterface, 1);
+    this(address, port, networkInterface, Config.TTL_DEFAULT);
   }
 
   /**
@@ -74,33 +79,32 @@ public class LWESTransport
    * @param ttl for multicast addresses, the TTL value to use
    * @throws TransportException
    */
-  public LWESTransport (InetAddress address,
-                        int port,
-                        InetAddress networkInterface,
-                        int ttl)
+  public LWESTransport(InetAddress address,
+                       int port,
+                       InetAddress networkInterface,
+                       int ttl)
     throws TransportException
   {
-    if(address == null) return;
+    this(new Config(
+        address, networkInterface, port, ttl, null).toEmitterGroupProperties(
+            address.getHostAddress()), address.getHostAddress());
+  }
 
-    // detect the address type and initialize accordingly
-    if(address.isMulticastAddress()) {
-      MulticastEventEmitter m = new MulticastEventEmitter();
-      m.setMulticastAddress(address);
-      m.setMulticastPort(port);
-      m.setInterface(networkInterface);
-      m.setTimeToLive(ttl);
-      emitter = m;
-    } else {
-      UnicastEventEmitter u = new UnicastEventEmitter();
-      u.setAddress(address);
-      u.setPort(port);
-      emitter = u;
-    }
-
+  /**
+   * Creates and initializes a LWES transport using an emitter group config.
+   * @param emitterGroupProps properties of the emitter group
+   * @param emitterGroupName name of the emitter group
+   * @throws TransportException
+   */
+  public LWESTransport(Properties emitterGroupProps, String emitterGroupName)
+    throws TransportException
+  {
     try {
-      emitter.initialize();
-    } catch(Exception e) {
-      throw new TransportException("Unable to inialize emitter", e);
+      emitterGroup =
+        EmitterGroupBuilder.createGroup(emitterGroupProps, emitterGroupName,
+                                        new EventFactory());
+    } catch (Exception e) {
+      throw new TransportException("Unable to initialize emitter group", e);
     }
   }
 
@@ -110,11 +114,11 @@ public class LWESTransport
     throws TransportException
   {
     if (messages == null || messages.length == 0
-        || contexts == null || emitter == null) return;
+        || contexts == null || emitterGroup == null) return;
 
     try {
       // create the event and set parameters
-      Event logMsg = emitter.createEvent(LOG_EVENT, false);
+      Event logMsg = emitterGroup.createEvent(LOG_EVENT, false);
       logMsg.setString("prog_id", programId);
       logMsg.setUInt16("num", messages.length);
 
@@ -147,11 +151,9 @@ public class LWESTransport
       }
 
       // emit the event
-      emitter.emit(logMsg);
+      emitterGroup.emitToGroup(logMsg);
     } catch(EventSystemException e) {
       throw new TransportException("Error sending log event", e);
-    } catch(IOException ie) {
-      throw new TransportException("Error sending log event", ie);
     }
   }
 
@@ -167,7 +169,7 @@ public class LWESTransport
       SamplesMessage[] samples, Context[] contexts) throws TransportException {
 
     // create the event
-    Event event = emitter.createEvent(STATS_EVENT, false);
+    Event event = emitterGroup.createEvent(STATS_EVENT, false);
     event.setString("prog_id", programId);
 
     // keeps the number of attributes that are being added to the event when
@@ -180,7 +182,7 @@ public class LWESTransport
 
     // finally emit the event
     try {
-      emitter.emit(event);
+      emitterGroup.emitToGroup(event);
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
@@ -198,7 +200,7 @@ public class LWESTransport
   public int sendStats (Event event, StatsMessage[] messages,
       Context[] contexts, int idx) {
     if (messages == null || messages.length == 0
-        || contexts == null || emitter == null)
+        || contexts == null || emitterGroup == null)
       return idx;
 
     // for each statistic, set the values
@@ -233,7 +235,7 @@ public class LWESTransport
    */
   public int sendSamples (Event event, SamplesMessage[] messages,
       int idx) {
-    if (messages == null || messages.length == 0 || emitter == null) {
+    if (messages == null || messages.length == 0 || emitterGroup == null) {
       return idx;
     }
 
@@ -322,11 +324,11 @@ public class LWESTransport
                          Context[] contexts)
     throws TransportException
   {
-    if (contexts == null || emitter == null)
+    if (contexts == null || emitterGroup == null)
       return;
 
     try {
-      Event traceMsg = emitter.createEvent(TRACE_EVENT, false);
+      Event traceMsg = emitterGroup.createEvent(TRACE_EVENT, false);
       traceMsg.setString(PROG_ID_KEY, programId);
       String hostName = InetAddress.getLocalHost ().getHostName ();
       traceMsg.setString(SRC_HOST_KEY, hostName);
@@ -335,20 +337,73 @@ public class LWESTransport
           traceMsg.setString(contexts[i].getKey(), contexts[i].getValue());
       }
       // emit the event
-      emitter.emit(traceMsg);
+      emitterGroup.emitToGroup(traceMsg);
     } catch(Exception e) {
       throw new TransportException("Error sending log event", e);
     }
   }
 
+  private static final String PERF_ID_KEY = "id";
+  private static final String PERF_CALLER_LABEL_KEY = "caller_label";
+  private static final String PERF_NUM_KEY = "num";
+  private static final String PERF_LABEL_PREFIX = "label";
+  private static final String PERF_START_PREFIX = "start";
+  private static final String PERF_END_PREFIX = "end";
+
+  public void sendPerformanceTrace(String id, String callerLabel,
+                                   String[] label, long[] start,
+                                   long[] end, Context[] contexts)
+    throws TransportException
+  {
+    if (id == null || callerLabel == null || label == null || start == null ||
+        end == null || contexts == null)
+    {
+      throw new IllegalArgumentException("missing required argument");
+    }
+
+    if (label.length != start.length || label.length != end.length)
+    {
+      throw new IllegalArgumentException("label, start, and end arrays must " +
+                                         "all be of equal length");
+    }
+
+    try {
+      Event perfMsg = emitterGroup.createEvent(PERF_EVENT, false);
+
+      perfMsg.setString(PERF_ID_KEY, id);
+      perfMsg.setString(PERF_CALLER_LABEL_KEY, callerLabel);
+      perfMsg.setUInt16(PERF_NUM_KEY, label.length);
+
+      for (int i = 0; i < label.length; ++i) {
+        perfMsg.setString(PERF_LABEL_PREFIX + i, label[i]);
+        perfMsg.setInt64(PERF_START_PREFIX + i, start[i]);
+        perfMsg.setInt64(PERF_END_PREFIX + i, end[i]);
+      }
+
+      // set the contextual data in the event
+      if (contexts.length > 0) {
+        perfMsg.setUInt16("ctxt_num", contexts.length);
+
+        for (int i = 0; i < contexts.length; ++i) {
+          perfMsg.setString("ctxt_k" + i, contexts[i].getKey());
+          perfMsg.setString("ctxt_v" + i, contexts[i].getValue());
+        }
+      }
+
+      // emit the event
+      emitterGroup.emitToGroup(perfMsg);
+    } catch(Exception e) {
+      throw new TransportException("Error sending perf event", e);
+    }
+  }
 
   public void shutdown()
     throws TransportException
   {
     try {
-      emitter.shutdown();
+      emitterGroup.shutdown();
     } catch(Exception e) {
-      throw new TransportException("Unable to shutdown emitter");
+      throw new TransportException("Unable to shutdown emitter group");
     }
   }
 }

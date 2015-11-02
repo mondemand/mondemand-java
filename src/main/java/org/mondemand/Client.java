@@ -13,8 +13,11 @@
 package org.mondemand;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -207,7 +210,7 @@ public class Client {
     flush();
 
     // stop the auto-emit thread
-    if(emitterThread != null) {
+    if (emitterThread != null) {
       try {
         autoStatEmitter.stop();
         emitterThread.interrupt();
@@ -227,10 +230,10 @@ public class Client {
     contextStats.clear();
 
     // shutdown all the transports
-    if(transports != null) {
-      for(int i=0; i<transports.size(); ++i) {
+    if (transports != null) {
+      for (Transport t : transports) {
         try {
-          transports.elementAt(i).shutdown();
+          t.shutdown();
         } catch(TransportException e) {}
       }
     }
@@ -369,68 +372,72 @@ public class Client {
   /**
    * adds transports from the default configuration file
    * at "/etc/mondemand/mondemand.conf"
-   * @throws Exception if default config file does not exist, or if there is a problem
-   *        reading the file, or if port cannot be converted to number, or if addresses
-   *        cannot be converted to valid hosts, or if a transport cannot be created
-   *        from addresses/port specified in the file.
+   * @throws FileNotFoundException if config file could not be found
+   * @throws IOException if config file could not be read
+   * @throws TransportException if there was an error creating the LWESTransport
+   * @throws UnknownHostException if a bad host is specified
+   * @throws IllegalArgumentException if default config file does not exist,
+   *        or if there is a problem reading the file, or either port or
+   *        address is missing, or if port cannot be converted to number, or if
+   *        addresses cannot be converted to valid hosts, or if ttl cannot be
+   *        converted to number in valid range, or if sendto cannot be converted
+   *        to number in valid range, or if length of port or ttl arrays does
+   *        not equal one or length of addr array, or if a transport cannot be
+   *        created for addresses/port specified in the file.
+   * @throws NumberFormatException if a bad PORT, TTL, or SENDTO is specified
    */
   public void addTransportsFromDefaultConfigFile()
-      throws Exception {
+      throws FileNotFoundException, IOException, TransportException,
+             UnknownHostException {
     this.addTransportsFromConfigFile(CONFIG_FILE);
   }
 
   /**
    * adds transports from a configuration file. the format of the file is:
-   * MONDEMAND_ADDR="ip_addr_1, ip_addr_2, ..."
-   * MONDEMAND_PORT="port"
-   * (optional) MONDEMAND_TTL="ttl"
+   * MONDEMAND_ADDR="<ip>[,<ip>]?"
+   * MONDEMAND_PORT="<port>[,<port>]?"
+   * (optional) MONDEMAND_TTL="<ttl>[,<ttl>]?"
+   * (optional) MONDEMAND_SENDTO="<sendto>"
    *
    * @param configFileName - configuration file name.
-   * @throws Exception if file does not exist, or if there is a problem reading
-   *        the file, or either port or address is missing, or if port cannot
-   *        be converted to number, or if addresses cannot be converted to valid
-   *        hosts, or if ttl cannot be converted to number in valid range,
-   *        or if a transport cannot be created for addresses/port
-   *        specified in the file.
+   * @throws FileNotFoundException if config file could not be found
+   * @throws IOException if config file could not be read
+   * @throws TransportException if there was an error creating the LWESTransport
+   * @throws UknownHostException if a bad host is specified
+   * @throws IllegalArgumentException if file does not exist, or if there is a
+   *        problem reading the file, or either port or address is missing, or
+   *        if port cannot be converted to number, or if addresses cannot be
+   *        converted to valid hosts, or if ttl cannot be converted to number in
+   *        valid range, or if sendto cannot be converted to number in valid
+   *        range, or if length of port or ttl arrays does not equal one or
+   *        length of addr array, or if a transport cannot be created for
+   *        addresses/port specified in the file.
+   * @throws NumberFormatException if a bad PORT, TTL, or SENDTO is specified
    */
   public void addTransportsFromConfigFile(String configFileName)
-      throws Exception {
-    final String ADDR = "MONDEMAND_ADDR";
-    final String PORT = "MONDEMAND_PORT";
-    final String TTL = "MONDEMAND_TTL";
-    final int TTL_DEFAULT = 5;
-    final int TTL_MIN = 0;
-    final int TTL_MAX = 32;
-
-    String[] addresses = null;
-    Integer port = null;
-    Integer ttl = TTL_DEFAULT;
+      throws FileNotFoundException, IOException, TransportException,
+             UnknownHostException {
     Properties prop = new Properties();
     InputStream input = null;
+
     try {
       // load a properties file
       input = new FileInputStream(configFileName);
       prop.load(input);
-      // make sure MONDEMAND_ADDR and MONDEMAND_PORT are both present
-      if(prop.getProperty(ADDR) == null || prop.getProperty(PORT) == null) {
-        throw new Exception( ADDR + " and " + PORT + " should be specified in the "
-            + "configuration file " + configFileName);
-      }
-      String adr = prop.getProperty(ADDR).replace("\"", "").replace(" ", "");
-      addresses = adr.split(",");
-      String p = prop.getProperty(PORT).replace("\"", "");
-      port = Integer.parseInt(p);
-      // check for existence of ttl
-      String t = prop.getProperty(TTL);
-      ttl = t != null ? Integer.parseInt(t.replace("\"", "")) : TTL_DEFAULT;
-      if(ttl < TTL_MIN || ttl > TTL_MAX) {
-        throw new Exception( "TTL value specified in the config '" + ttl + "' is " +
-            "outside the valid range of [" + TTL_MIN + "," + TTL_MAX + "]");
-      }
-      // add a new transport for each address/port
-      for(int cnt=0; cnt<addresses.length; cnt++) {
-        addTransport( new LWESTransport(InetAddress.getByName(addresses[cnt]),
-            port.intValue(), null, ttl) );
+
+      // build config defaults first
+      Config defaults = ConfigBuilder.buildDefaultConfig(prop);
+
+      // build event-specific configs
+      for (EventType eventType : EventType.values()) {
+        EventSpecificConfig eventSpecific =
+          ConfigBuilder.buildEventSpecificConfig(prop, eventType, defaults);
+
+        Properties emitterGroupProps =
+          eventSpecific.toEmitterGroupProperties(eventType);
+
+        // add transport for each event type
+        addTransport(new LWESTransport(emitterGroupProps, eventType.name()));
       }
     } finally {
       if (input != null) {
@@ -448,11 +455,11 @@ public class Client {
    * @param transport the transport object to add
    */
   public synchronized void addTransport(Transport transport) {
-    if(this.transports == null) {
+    if (this.transports == null) {
       this.transports = new Vector<Transport>();
     }
 
-    if(transport != null) {
+    if (transport != null) {
       this.transports.add(transport);
     }
   }
@@ -1041,17 +1048,60 @@ public class Client {
 
       Context[] contexts = tmp.values().toArray(new Context[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
+      for (Transport t : transports) {
         try {
           t.sendTrace(programId, contexts);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
       }
+
       ret = true;
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.traceMessage()", e);
+    }
+
+    return ret;
+  }
+
+  /**
+   * Send a performance trace message.
+   * @see <a href="https://github.com/mondemand/mondemand.github.com/blob/master/performance_monitoring.md">Performance Monitoring</a>
+   * @param id the performance trace id
+   * @param callerLabel the label of the caller, used to give a directed graph
+   *                    of performance timings
+   * @param label an array of service labels, should equal length of start and
+   *              end arrays
+   * @param start an array of start times
+   * @param end an array of end times
+   * @param context a map of contextual metadata
+   */
+  public boolean performanceTraceMessage(String id, String callerLabel,
+                                         String[] label, long[] start,
+                                         long[] end,
+                                         Map<String, String> context) {
+    boolean ret = false;
+
+    try {
+      List<Context> contextList = new ArrayList<Context>();
+
+      for (Entry<String,String> entry : context.entrySet()) {
+        contextList.add(new Context(entry.getKey(), entry.getValue()));
+      }
+
+      Context[] contexts = contextList.toArray(new Context[0]);
+
+      for (Transport t : transports) {
+        try {
+          t.sendPerformanceTrace(id, callerLabel, label, start, end, contexts);
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendTrace()", te);
+        }
+      }
+
+      ret = true;
+    } catch (Exception e) {
+      errorHandler.handleError("Error calling Client.performanceTraceMessage()", e);
     }
 
     return ret;
@@ -1148,14 +1198,13 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchLogs() {
-    if(this.messages == null || this.transports == null) return;
+    if (this.messages == null || this.transports == null) return;
 
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
+      for (Transport t : transports) {
         try {
           t.sendLogs(programId, messages, contexts);
         } catch(TransportException te) {
@@ -1173,8 +1222,8 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchStatsSamples() {
-    if(this.transports == null ||
-        ( (this.samples == null || this.samples.isEmpty()) &&
+    if (this.transports == null ||
+        ((this.samples == null || this.samples.isEmpty()) &&
          (this.stats == null || this.stats.isEmpty())))
     {
       return;
@@ -1185,8 +1234,7 @@ public class Client {
       StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
       SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
 
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
+      for (Transport t : transports) {
         try {
           t.send(programId, statsMsgs, samplesMsgs, contexts);
         } catch(TransportException te) {
@@ -1203,25 +1251,30 @@ public class Client {
    */
   private synchronized void dispatchContextStats()
   {
-    if(this.transports == null ||
-        this.contextStats == null || this.contextStats.isEmpty()) {
+    if (this.transports == null || this.contextStats == null ||
+        this.contextStats.isEmpty()) {
       return;
     }
+
     for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStats.entrySet())
     {
       List<Context> newContexts = new ArrayList<Context>(this.contexts.values());
       newContexts.addAll(entry.getKey().getList());
       List<StatsMessage> statsMsgs = new ArrayList<StatsMessage>();
+
       for (Map.Entry<String, Long> stat : entry.getValue().asMap().entrySet())
       {
         StatsMessage statsMessage = new StatsMessage(stat.getKey(), StatType.Counter);
         statsMessage.incrementBy(stat.getValue().intValue());
         statsMsgs.add(statsMessage);
       }
-      for(int i=0; i<this.transports.size(); ++i) {
-        Transport t = transports.elementAt(i);
+
+      Context[] contexts = newContexts.toArray(new Context[0]);
+
+      for (Transport t : transports) {
         try {
-          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null, newContexts.toArray(new Context[0]));
+          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
+                 contexts);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
@@ -1236,5 +1289,4 @@ public class Client {
   public ConcurrentHashMap<String, SamplesMessage> getSamples() {
     return samples;
   }
-
 }
