@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/mondemand/mondemand-java.svg?branch=master)](https://travis-ci.org/mondemand/mondemand-java)
+
 This is the Java API for MonDemand.
 
 Build
