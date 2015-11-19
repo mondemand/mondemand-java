@@ -73,7 +73,7 @@ public class ConfigBuilder {
   }
 
   private static String getConfigFragment(EventType eventType) {
-    return (eventType == null ? "" : eventType.name());
+    return (eventType == null ? "" : eventType.name() + "_");
   }
 
   private static String cleanString(String input) {
