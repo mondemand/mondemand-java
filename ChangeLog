@@ -1,3 +1,8 @@
+Version 6.0.0
+  * added an event emission prefilter in LWESTransport
+  * fixed latent bug in emission of sample metrics
+  * major version bump due to lwes-java upgrade that happened with v5.4.0
+
 Version 5.4.1
   * fixed bug in ConfigBuilder when looking up event specific configs
 
