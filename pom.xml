@@ -4,7 +4,7 @@
   <groupId>org.mondemand</groupId>
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
-  <version>5.4.1</version>
+  <version>6.0.0</version>
   <name>mondemand-java</name>
   <description>MonDemand java implementation</description>
   <url>http://mondemand.org</url>
@@ -62,7 +62,7 @@
       <groupId>org.lwes</groupId>
       <artifactId>lwes-java</artifactId>
       <type>jar</type>
-      <version>2.1.1</version>
+      <version>2.2.0</version>
       <scope>compile</scope>
     </dependency>
     <dependency>

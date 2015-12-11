@@ -26,6 +26,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
@@ -68,6 +69,7 @@ public class Client {
   private Vector<Transport> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
+  private ReentrantReadWriteLock samplesLock = new ReentrantReadWriteLock();
 
   /********************************
    * CONSTRUCTORS AND DESTRUCTORS *
@@ -437,7 +439,7 @@ public class Client {
           eventSpecific.toEmitterGroupProperties(eventType);
 
         // add transport for each event type
-        addTransport(new LWESTransport(emitterGroupProps, eventType.name()));
+        addTransport(new LWESTransport(emitterGroupProps, eventType));
       }
     } finally {
       if (input != null) {
@@ -632,26 +634,30 @@ public class Client {
   public void addSample(String key, int value, int trackingTypeValue, int samplesMaxCount) {
     String realKey = key;
 
-    // create the HashMap if it doesn't exist
-    if(this.samples == null) {
-      this.samples = new ConcurrentHashMap<String,SamplesMessage>();
-    }
-
     // set the key
     if(realKey == null) {
       // determine the key from the calling class and line number
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
-    SamplesMessage realValue = (SamplesMessage) this.samples.get(realKey);
-    if(realValue == null) {
-      // create the counter if doesn't exist
-      realValue = new SamplesMessage(realKey, trackingTypeValue, samplesMaxCount);
-      this.samples.putIfAbsent(realKey, realValue);
-      realValue = this.samples.get(realKey);
+    samplesLock.readLock().lock();
+
+    try {
+      SamplesMessage realValue = (SamplesMessage)this.samples.get(realKey);
+
+      if (realValue == null) {
+        // create the counter if doesn't exist
+        realValue = new SamplesMessage(realKey, trackingTypeValue,
+                                       samplesMaxCount);
+        this.samples.putIfAbsent(realKey, realValue);
+        realValue = this.samples.get(realKey);
+      }
+
+      // update the counter
+      realValue.addSample(value);
+    } finally {
+      samplesLock.readLock().unlock();
     }
-    // update the counter
-    realValue.addSample(value);
   }
 
   /**
@@ -1232,14 +1238,25 @@ public class Client {
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
-      SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
 
-      for (Transport t : transports) {
-        try {
-          t.send(programId, statsMsgs, samplesMsgs, contexts);
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendStats()", te);
+      samplesLock.writeLock().lock();
+
+      try {
+        SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
+
+        for (Transport t : transports) {
+          try {
+            t.send(programId, statsMsgs, samplesMsgs, contexts);
+          } catch(TransportException te) {
+            errorHandler.handleError("Error calling Transport.sendStats()", te);
+          }
         }
+
+        for (SamplesMessage msg : samplesMsgs) {
+          msg.resetSamples();
+        }
+      } finally {
+        samplesLock.writeLock().unlock();
       }
     } catch(Exception e) {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);

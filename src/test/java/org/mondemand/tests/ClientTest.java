@@ -319,6 +319,8 @@ public class ClientTest {
     Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
     client.addTransport(localLwesTransport);
+    // add a second transport to test stats sample resets
+    client.addTransport(localLwesTransport);
     Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
     emitterGroup.setAccessible(true);
     Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");

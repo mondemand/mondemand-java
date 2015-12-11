@@ -15,10 +15,12 @@ package org.mondemand.transport;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Properties;
 
 import org.mondemand.Config;
 import org.mondemand.Context;
+import org.mondemand.EventType;
 import org.mondemand.LogMessage;
 import org.mondemand.SamplesMessage;
 import org.mondemand.StatType;
@@ -51,6 +53,8 @@ public class LWESTransport
    * Instance attributes *
    ***********************/
   private EmitterGroup emitterGroup = null;
+  private EnumSet<EventType> allowedEventTypes =
+    EnumSet.allOf(EventType.class);
 
   /**
    * Creates an initializes a LWES transport.
@@ -108,13 +112,37 @@ public class LWESTransport
     }
   }
 
+  /**
+   * Creates and initializes a LWES transport for a specific event type using
+   * an emitter group config.
+   * @param emitterGroupProps properties of the emitter group
+   * @param eventType the type of event for this transport to emit
+   * @throws TransportException
+   */
+  public LWESTransport(Properties emitterGroupProps, EventType eventType)
+    throws TransportException
+  {
+    this(emitterGroupProps, eventType.name());
+    this.allowedEventTypes = EnumSet.of(eventType);
+  }
+
+  protected boolean shouldEmitEvent(EventType eventType) {
+    return allowedEventTypes.contains(eventType);
+  }
+
   public void sendLogs (String programId,
                         LogMessage[] messages,
                         Context[] contexts)
     throws TransportException
   {
-    if (messages == null || messages.length == 0
-        || contexts == null || emitterGroup == null) return;
+    if (!shouldEmitEvent(EventType.LOG)) {
+      return;
+    }
+
+    if (messages == null || messages.length == 0 || contexts == null ||
+        emitterGroup == null) {
+      return;
+    }
 
     try {
       // create the event and set parameters
@@ -167,6 +195,9 @@ public class LWESTransport
    */
   public void send(String programId, StatsMessage[] stats,
       SamplesMessage[] samples, Context[] contexts) throws TransportException {
+    if (!shouldEmitEvent(EventType.STATS)) {
+      return;
+    }
 
     // create the event
     Event event = emitterGroup.createEvent(STATS_EVENT, false);
@@ -312,8 +343,7 @@ public class LWESTransport
         }
       }
     }
-    // clear the samples in the sampleMessage
-    msg.resetSamples();
+
     return index;
   }
 
@@ -324,8 +354,13 @@ public class LWESTransport
                          Context[] contexts)
     throws TransportException
   {
-    if (contexts == null || emitterGroup == null)
+    if (!shouldEmitEvent(EventType.TRACE)) {
       return;
+    }
+
+    if (contexts == null || emitterGroup == null) {
+      return;
+    }
 
     try {
       Event traceMsg = emitterGroup.createEvent(TRACE_EVENT, false);
@@ -355,6 +390,10 @@ public class LWESTransport
                                    long[] end, Context[] contexts)
     throws TransportException
   {
+    if (!shouldEmitEvent(EventType.PERF)) {
+      return;
+    }
+
     if (id == null || callerLabel == null || label == null || start == null ||
         end == null || contexts == null)
     {
