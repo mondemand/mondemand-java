@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -149,6 +150,11 @@ public class Client {
     samples = new ConcurrentHashMap<String,SamplesMessage>();
     transports = new ConcurrentHashMap<EventType, List<Transport>>();
     contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
+
+    // initialize transports with empty lists
+    for (EventType eventType : EventType.values()) {
+      transports.put(eventType, new CopyOnWriteArrayList<Transport>());
+    }
 
     // create and start the emitter thread
     if(autoStatEmit) {
@@ -479,15 +485,7 @@ public class Client {
       return;
     }
 
-    List<Transport> transportList = this.transports.get(eventType);
-
-    if (transportList == null) {
-      this.transports.putIfAbsent(eventType,
-                                  new CopyOnWriteArrayList<Transport>());
-      transportList = this.transports.get(eventType);
-    }
-
-    transportList.add(transport);
+    this.transports.get(eventType).add(transport);
   }
 
   /**
@@ -1074,16 +1072,11 @@ public class Client {
 
       Context[] contexts = tmp.values().toArray(new Context[0]);
 
-      List<Transport> transportList = transports.get(EventType.TRACE);
-
-      if (transportList != null) {
-        for (Transport t : transportList) {
-          try {
-            t.sendTrace(programId, contexts);
-          } catch (TransportException te) {
-            errorHandler.handleError("Error calling Transport.sendTrace()",
-                                     te);
-          }
+      for (Transport t : transports.get(EventType.TRACE)) {
+        try {
+          t.sendTrace(programId, contexts);
+        } catch (TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
       }
 
@@ -1122,17 +1115,13 @@ public class Client {
 
       Context[] contexts = contextList.toArray(new Context[0]);
 
-      List<Transport> transportList = transports.get(EventType.PERF);
-
-      if (transportList != null) {
-        for (Transport t : transportList) {
-          try {
-            t.sendPerformanceTrace(id, callerLabel, label, start, end,
-                                   contexts);
-          } catch (TransportException te) {
-            errorHandler.handleError("Error calling Transport.sendPerformanceTrace()",
-                                     te);
-          }
+      for (Transport t : transports.get(EventType.PERF)) {
+        try {
+          t.sendPerformanceTrace(id, callerLabel, label, start, end,
+                                 contexts);
+        } catch (TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendPerformanceTrace()",
+                                   te);
         }
       }
 
@@ -1241,16 +1230,11 @@ public class Client {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
 
-      List<Transport> transportList = transports.get(EventType.LOG);
-
-      if (transportList != null) {
-        for (Transport t : transportList) {
-          try {
-            t.sendLogs(programId, messages, contexts);
-          } catch (TransportException te) {
-            errorHandler.handleError("Error calling Transport.sendLogs()",
-                                     te);
-          }
+      for (Transport t : transports.get(EventType.LOG)) {
+        try {
+          t.sendLogs(programId, messages, contexts);
+        } catch (TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendLogs()", te);
         }
       }
     } catch (Exception e) {
@@ -1278,16 +1262,11 @@ public class Client {
       SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
       this.samples = new ConcurrentHashMap<String, SamplesMessage>();
 
-      List<Transport> transportList = transports.get(EventType.STATS);
-
-      if (transportList != null) {
-        for (Transport t : transportList) {
-          try {
-            t.send(programId, statsMsgs, samplesMsgs, contexts);
-          } catch (TransportException te) {
-            errorHandler.handleError("Error calling Transport.sendStats()",
-                                     te);
-          }
+      for (Transport t : transports.get(EventType.STATS)) {
+        try {
+          t.send(programId, statsMsgs, samplesMsgs, contexts);
+        } catch (TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
       }
     } catch (Exception e) {
