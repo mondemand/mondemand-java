@@ -312,8 +312,7 @@ public class LWESTransport
         }
       }
     }
-    // clear the samples in the sampleMessage
-    msg.resetSamples();
+
     return index;
   }
 

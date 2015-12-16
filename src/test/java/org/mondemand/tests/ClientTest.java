@@ -30,9 +30,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
@@ -318,6 +318,8 @@ public class ClientTest {
     // create a client, with a transport's emitter that has the emit() stubbed out
     Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    // add a second transport to test stats sample resets
     client.addTransport(localLwesTransport);
     Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
     emitterGroup.setAccessible(true);
@@ -642,7 +644,7 @@ public class ClientTest {
       // everything valid
       mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
       output = new FileOutputStream(mondemandConfigFile);
-      Vector<String> addresses = new Vector<String>();
+      List<String> addresses = new ArrayList<String>();
       addresses.add("127.0.0.1");
       addresses.add("127.0.0.2");
       addresses.add("224.1.2.200");
@@ -660,30 +662,33 @@ public class ClientTest {
         Field transports = client.getClass().getDeclaredField("transports");
         transports.setAccessible(true);
         @SuppressWarnings("unchecked")
-        Vector<Transport> clientTransports = (Vector<Transport>)transports.get(client);
+        ConcurrentHashMap<EventType, List<Transport>> clientTransports =
+          (ConcurrentHashMap<EventType, List<Transport>>)transports.get(client);
         assertEquals(clientTransports.size(), EventType.values().length);
-        for(Transport t: clientTransports) {
-          int cnt = 0;
-          Field emitterGroup = t.getClass().getDeclaredField("emitterGroup");
-          emitterGroup.setAccessible(true);
-          Field emitters = emitterGroup.get(t).getClass().getDeclaredField("emitters");
-          emitters.setAccessible(true);
-          String address;
-          int port;
-          DatagramSocketEventEmitter<?>[] dsee_arr =
-            (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(t));
-          for (DatagramSocketEventEmitter<?> dsee : dsee_arr) {
-            if (dsee instanceof UnicastEventEmitter) {
-              address = ((UnicastEventEmitter)dsee).getAddress().getHostAddress();
-              port = ((UnicastEventEmitter)dsee).getPort();
-            } else {
-              address = ((MulticastEventEmitter)dsee).getMulticastAddress().getHostAddress();
-              port = ((MulticastEventEmitter)dsee).getMulticastPort();
-              int ttl = ((MulticastEventEmitter)dsee).getTimeToLive();
-              assertEquals(ttl, 10);
+        for (List<Transport> transportList : clientTransports.values()) {
+          for(Transport t: transportList) {
+            int cnt = 0;
+            Field emitterGroup = t.getClass().getDeclaredField("emitterGroup");
+            emitterGroup.setAccessible(true);
+            Field emitters = emitterGroup.get(t).getClass().getDeclaredField("emitters");
+            emitters.setAccessible(true);
+            String address;
+            int port;
+            DatagramSocketEventEmitter<?>[] dsee_arr =
+              (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(t));
+            for (DatagramSocketEventEmitter<?> dsee : dsee_arr) {
+              if (dsee instanceof UnicastEventEmitter) {
+                address = ((UnicastEventEmitter)dsee).getAddress().getHostAddress();
+                port = ((UnicastEventEmitter)dsee).getPort();
+              } else {
+                address = ((MulticastEventEmitter)dsee).getMulticastAddress().getHostAddress();
+                port = ((MulticastEventEmitter)dsee).getMulticastPort();
+                int ttl = ((MulticastEventEmitter)dsee).getTimeToLive();
+                assertEquals(ttl, 10);
+              }
+              assertEquals(address, addresses.get(cnt++));
+              assertEquals(port, 1234);
             }
-            assertEquals(address, addresses.get(cnt++));
-            assertEquals(port, 1234);
           }
         }
       } catch(Exception e) {
@@ -922,7 +927,6 @@ public class ClientTest {
     contexts.set(client, null);
     client.getContextKeys();
 
-    transports.set(client, null);
     client.addTransport(null);
 
     stats.set(client, null);
@@ -940,11 +944,6 @@ public class ClientTest {
     client.flushLogs();
     client.flush();
     client.setKey(null, 1);
-
-    transports.set(client, null);
-    client.flushLogs();
-    client.flush();
-    client.addTransport(null);
 
     messages.set(client, null);
     client.log(Level.DEBUG, null, "abc123", new String[] { "test" });
