@@ -1297,17 +1297,14 @@ public class Client {
       }
 
       Context[] contexts = newContexts.toArray(new Context[0]);
-      List<Transport> transportList = transports.get(EventType.STATS);
 
-      if (transportList != null) {
-        for (Transport t : transportList) {
-          try {
-            t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
-                   contexts);
-          } catch(TransportException te) {
-            errorHandler.handleError("Error calling Transport.sendStats()",
-                                     te);
-          }
+      for (Transport t : transports.get(EventType.STATS)) {
+        try {
+          t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
+                 contexts);
+        } catch(TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendStats()",
+                                   te);
         }
       }
     }
