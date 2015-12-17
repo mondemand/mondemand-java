@@ -19,13 +19,16 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Vector;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
@@ -65,7 +68,7 @@ public class Client {
   private ConcurrentHashMap<String,StatsMessage> stats = null;
   private ConcurrentHashMap<String,SamplesMessage> samples = null;
   private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
-  private Vector<Transport> transports = null;
+  private ConcurrentHashMap<EventType, List<Transport>> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
 
@@ -145,8 +148,13 @@ public class Client {
     messages = new ConcurrentHashMap<String,LogMessage>();
     stats = new ConcurrentHashMap<String,StatsMessage>();
     samples = new ConcurrentHashMap<String,SamplesMessage>();
-    transports = new Vector<Transport>();
+    transports = new ConcurrentHashMap<EventType, List<Transport>>();
     contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
+
+    // initialize transports with empty lists
+    for (EventType eventType : EventType.values()) {
+      transports.put(eventType, new CopyOnWriteArrayList<Transport>());
+    }
 
     // create and start the emitter thread
     if(autoStatEmit) {
@@ -230,11 +238,17 @@ public class Client {
     contextStats.clear();
 
     // shutdown all the transports
-    if (transports != null) {
-      for (Transport t : transports) {
-        try {
-          t.shutdown();
-        } catch(TransportException e) {}
+    Set<Transport> seenTransports = new HashSet<Transport>();
+
+    for (List<Transport> transportList : transports.values()) {
+      for (Transport t : transportList) {
+        if (!seenTransports.contains(t)) {
+          seenTransports.add(t);
+
+          try {
+            t.shutdown();
+          } catch (TransportException e) {}
+        }
       }
     }
   }
@@ -437,7 +451,8 @@ public class Client {
           eventSpecific.toEmitterGroupProperties(eventType);
 
         // add transport for each event type
-        addTransport(new LWESTransport(emitterGroupProps, eventType.name()));
+        addTransport(eventType,
+                     new LWESTransport(emitterGroupProps, eventType.name()));
       }
     } finally {
       if (input != null) {
@@ -454,14 +469,23 @@ public class Client {
    * Adds a new transport to this client.
    * @param transport the transport object to add
    */
-  public synchronized void addTransport(Transport transport) {
-    if (this.transports == null) {
-      this.transports = new Vector<Transport>();
+  public void addTransport(Transport transport) {
+    for (EventType eventType : EventType.values()) {
+      addTransport(eventType, transport);
+    }
+  }
+
+  /**
+   * Adds a new event-specific transport to this client.
+   * @param eventType the event type for this transport
+   * @param transport the transport object to add
+   */
+  public void addTransport(EventType eventType, Transport transport) {
+    if (null == transport) {
+      return;
     }
 
-    if (transport != null) {
-      this.transports.add(transport);
-    }
+    this.transports.get(eventType).add(transport);
   }
 
   /**
@@ -1048,10 +1072,10 @@ public class Client {
 
       Context[] contexts = tmp.values().toArray(new Context[0]);
 
-      for (Transport t : transports) {
+      for (Transport t : transports.get(EventType.TRACE)) {
         try {
           t.sendTrace(programId, contexts);
-        } catch(TransportException te) {
+        } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendTrace()", te);
         }
       }
@@ -1091,11 +1115,13 @@ public class Client {
 
       Context[] contexts = contextList.toArray(new Context[0]);
 
-      for (Transport t : transports) {
+      for (Transport t : transports.get(EventType.PERF)) {
         try {
-          t.sendPerformanceTrace(id, callerLabel, label, start, end, contexts);
-        } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendTrace()", te);
+          t.sendPerformanceTrace(id, callerLabel, label, start, end,
+                                 contexts);
+        } catch (TransportException te) {
+          errorHandler.handleError("Error calling Transport.sendPerformanceTrace()",
+                                   te);
         }
       }
 
@@ -1198,20 +1224,20 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchLogs() {
-    if (this.messages == null || this.transports == null) return;
+    if (this.messages == null) return;
 
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
 
-      for (Transport t : transports) {
+      for (Transport t : transports.get(EventType.LOG)) {
         try {
           t.sendLogs(programId, messages, contexts);
-        } catch(TransportException te) {
+        } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendLogs()", te);
         }
       }
-    } catch(Exception e) {
+    } catch (Exception e) {
       errorHandler.handleError("Error calling Client.dispatchLogs()", e);
     }
   }
@@ -1222,9 +1248,8 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchStatsSamples() {
-    if (this.transports == null ||
-        ((this.samples == null || this.samples.isEmpty()) &&
-         (this.stats == null || this.stats.isEmpty())))
+    if  ((this.samples == null || this.samples.isEmpty()) &&
+         (this.stats == null || this.stats.isEmpty()))
     {
       return;
     }
@@ -1232,16 +1257,19 @@ public class Client {
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
       StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
-      SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
 
-      for (Transport t : transports) {
+      // snapshot samples map for dispatch
+      SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
+      this.samples = new ConcurrentHashMap<String, SamplesMessage>();
+
+      for (Transport t : transports.get(EventType.STATS)) {
         try {
           t.send(programId, statsMsgs, samplesMsgs, contexts);
-        } catch(TransportException te) {
+        } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
       }
-    } catch(Exception e) {
+    } catch (Exception e) {
       errorHandler.handleError("Error calling Client.dispatchStats()", e);
     }
   }
@@ -1251,8 +1279,7 @@ public class Client {
    */
   private synchronized void dispatchContextStats()
   {
-    if (this.transports == null || this.contextStats == null ||
-        this.contextStats.isEmpty()) {
+    if (this.contextStats == null || this.contextStats.isEmpty()) {
       return;
     }
 
@@ -1271,12 +1298,13 @@ public class Client {
 
       Context[] contexts = newContexts.toArray(new Context[0]);
 
-      for (Transport t : transports) {
+      for (Transport t : transports.get(EventType.STATS)) {
         try {
           t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
                  contexts);
         } catch(TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendStats()", te);
+          errorHandler.handleError("Error calling Transport.sendStats()",
+                                   te);
         }
       }
     }
