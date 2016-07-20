@@ -53,7 +53,8 @@ public class StderrTransport implements Transport {
   public void send (String programId,
       StatsMessage[] stats,
       SamplesMessage[] samples,
-      Context[] contexts) {
+      Context[] contexts,
+      Integer maxNumMetrics) {
    sendStats(programId, stats, contexts);
    sendSamples(programId, samples);
   }

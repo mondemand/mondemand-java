@@ -49,7 +49,6 @@ public class LWESTransport
    * Instance attributes *
    ***********************/
   private EmitterGroup emitterGroup = null;
-  private Integer maxNumMetrics = DEFAULT_MAXIMUM_METRICS;
 
   /**
    * Creates an initializes a LWES transport.
@@ -105,12 +104,6 @@ public class LWESTransport
     } catch (Exception e) {
       throw new TransportException("Unable to initialize emitter group", e);
     }
-  }
-
-  public LWESTransport setMaxNumMetrics(Integer maxNumMetrics)
-  {
-    this.maxNumMetrics = (null == maxNumMetrics) ? DEFAULT_MAXIMUM_METRICS : maxNumMetrics;
-    return this;
   }
 
   public void sendLogs (String programId,
@@ -171,7 +164,9 @@ public class LWESTransport
    * @throws TransportException
    */
   public void send(String programId, StatsMessage[] stats,
-      SamplesMessage[] samples, Context[] contexts) throws TransportException {
+      SamplesMessage[] samples, Context[] contexts, Integer maxNumMetrics)
+    throws TransportException
+  {
     if (contexts == null || emitterGroup == null)
     {
       return;
@@ -179,7 +174,9 @@ public class LWESTransport
 
     try
     {
-      StatsMessageStreamer sms = new StatsMessageStreamer(programId, contexts, emitterGroup, maxNumMetrics);
+      StatsMessageStreamer sms =
+        new StatsMessageStreamer(programId, contexts, emitterGroup,
+            (null == maxNumMetrics) ? DEFAULT_MAXIMUM_METRICS : maxNumMetrics);
 
       sendStats(sms, stats);
       sendSamples(sms, samples);

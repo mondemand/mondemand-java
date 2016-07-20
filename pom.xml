@@ -4,7 +4,7 @@
   <groupId>org.mondemand</groupId>
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
-  <version>6.1.0</version>
+  <version>7.0.0</version>
   <name>mondemand-java</name>
   <description>MonDemand java implementation</description>
   <url>http://mondemand.org</url>

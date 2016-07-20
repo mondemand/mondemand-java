@@ -459,8 +459,7 @@ public class Client {
 
         // add transport for each event type
         addTransport(eventType,
-                     new LWESTransport(emitterGroupProps, eventType.name())
-                     .setMaxNumMetrics(maxNumMetrics));
+                     new LWESTransport(emitterGroupProps, eventType.name()));
       }
     } finally {
       if (input != null) {
@@ -1272,7 +1271,7 @@ public class Client {
 
       for (Transport t : transports.get(EventType.STATS)) {
         try {
-          t.send(programId, statsMsgs, samplesMsgs, contexts);
+          t.send(programId, statsMsgs, samplesMsgs, contexts, this.maxNumMetrics);
         } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
@@ -1309,7 +1308,7 @@ public class Client {
       for (Transport t : transports.get(EventType.STATS)) {
         try {
           t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
-                 contexts);
+                 contexts, this.maxNumMetrics);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()",
                                    te);

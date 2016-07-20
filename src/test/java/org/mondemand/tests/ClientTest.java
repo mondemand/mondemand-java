@@ -343,6 +343,47 @@ public class ClientTest {
   }
 
   @Test
+  public void testMaxNumMetrics() throws Exception {
+    Client client = createClientNoTransports();
+    LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+    client.addTransport(localLwesTransport);
+    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
+    emitterGroup.setAccessible(true);
+    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
+    emitters.setAccessible(true);
+    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
+    eventFactory.setAccessible(true);
+    StubEmitterGroup g =
+       new StubEmitterGroup(
+           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
+           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
+    emitterGroup.set(localLwesTransport, g);
+
+    int count = 100;
+    client.addContext("test1", "test2");
+    client.setMaxNumMetrics(count);
+
+    for(int cnt=0; cnt<count; ++cnt) {
+      client.increment("key_" + cnt, cnt);
+    }
+
+    client.flush(false); // don't clear data
+    assertEquals(g.getEventsNumber(), 1);
+    assertEquals(g.eventTypesSize(), count);
+    g.clearMaps();
+
+    // adding a new key makes the number of metrics 1 more than max
+    client.increment("keyx", 1);
+
+    client.flush(true);
+    assertEquals(g.getEventsNumber(), 2);
+    assertEquals(g.eventTypesSize(), count + 1);
+
+    g.clearMaps();
+    client.finalize();
+  }
+
+  @Test
   public void testPerformanceTrace() throws Exception {
     Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
@@ -907,7 +948,7 @@ public class ClientTest {
     client = null;
 
     t.sendLogs(null, null, null);
-    t.send(null, null, null, null);
+    t.send(null, null, null, null, null);
 
     client = createClientNoTransports("ClientTest");
     client.flushLogs();
@@ -957,7 +998,7 @@ public class ClientTest {
     client.log("testTraceId", 555, Level.DEBUG, new TraceId(3117), "did it trace?",null);
 
     t.sendLogs(null, null, null);
-    t.send(null, null, null, null);
+    t.send(null, null, null, null, null);
     t.shutdown();
   }
 
@@ -1152,7 +1193,8 @@ public class ClientTest {
     public void send (String programId,
         StatsMessage[] messages,
         SamplesMessage[] samples,
-        Context[] contexts) {
+        Context[] contexts,
+        Integer maxNumMetrics) {
       stats = new StatsMessage[messages.length];
       for(int i=0; i<stats.length; ++i) {
         stats[i] = messages[i];
@@ -1203,7 +1245,8 @@ public class ClientTest {
     public void send (String programId,
         StatsMessage[] messages,
         SamplesMessage[] samples,
-        Context[] contexts) throws TransportException
+        Context[] contexts,
+        Integer maxNumMetrics) throws TransportException
     {
       throw new TransportException("BogusTransport");
     }
