@@ -218,10 +218,8 @@ public class LWESTransport
 
   /**
    * sends all the samples
-   * @param event - event to set the samples in
+   * @param sms - the StatsMessageStreamer to be updated
    * @param messages - samples
-   * @param idx - beginning index for the entries in the event
-   * @return index of last entry added to the event
    */
   public void sendSamples (StatsMessageStreamer sms, SamplesMessage[] messages) {
     if (messages == null || messages.length == 0)
@@ -243,9 +241,8 @@ public class LWESTransport
   /**
    * update an lwes event with the extra stats (min/max/...) for a sample message.
    *
-   * @param event - the lwes event to be updated
+   * @param sms - the StatsMessageStreamer to be updated
    * @param msg - the StatsMessage object to update the event
-   * @param index - the index to be incremented and used to lwes event
    */
   protected void updateLwesEventForSamples(StatsMessageStreamer sms, SamplesMessage msg) {
     // already synchronized on msg in the calling method
@@ -315,7 +312,7 @@ public class LWESTransport
     /**
      * create an event instance and reset num_metrics
      */
-    void initializeEvent ()
+    private void initializeEvent ()
       throws EventSystemException
     {
       statsMsg = emitterGroup.createEvent(STATS_EVENT, false);
@@ -325,7 +322,7 @@ public class LWESTransport
      * add any keys that are expected to be in each event and the context, and
      * emit the event.
      */
-    void emitMessage ()
+    private void emitMessage ()
     {
       statsMsg.setString("prog_id", program_id);
       statsMsg.setUInt16("num", num_metrics);

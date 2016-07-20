@@ -73,6 +73,8 @@ public class ClientTest {
   // stub emitter group for LwesTransport
   class StubEmitterGroup extends BroadcastEmitterGroup {
 
+    // since there may be multiple events sent for one set of metrics, collect
+    // each one's data separately
     class EventData {
       public Map<String, String> eventTypes = new HashMap<String, String>();
       public Map<String, String> eventKeys = new HashMap<String, String>();
@@ -508,6 +510,7 @@ public class ClientTest {
         }
       }
       // finally make sure no other key/value/types are set.
+      // * 2 is because we used two Transports above
       assertEquals(g.eventTypesSize(), idx * 2);
       assertEquals(g.eventKeysSize(), idx * 2);
       assertEquals(g.eventValuesSize(), idx * 2);
