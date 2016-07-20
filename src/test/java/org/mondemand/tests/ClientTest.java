@@ -11,17 +11,19 @@
  *======================================================================*/
 package org.mondemand.tests;
 
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
@@ -43,7 +45,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.lwes.Event;
 import org.lwes.EventFactory;
-import org.lwes.EventSystemException;
 import org.lwes.MapEvent;
 import org.lwes.emitter.BroadcastEmitterGroup;
 import org.lwes.emitter.DatagramSocketEventEmitter;
@@ -71,10 +72,17 @@ import org.mondemand.util.ClassUtils;
 public class ClientTest {
   // stub emitter group for LwesTransport
   class StubEmitterGroup extends BroadcastEmitterGroup {
-    public Map<String, String> eventTypes = new HashMap<String, String>();
-    public Map<String, String> eventKeys = new HashMap<String, String>();
-    public Map<String, Long> eventValues = new HashMap<String, Long>();
-    public Map<String, Object> others = new HashMap<String, Object>();
+
+    class EventData {
+      public Map<String, String> eventTypes = new HashMap<String, String>();
+      public Map<String, String> eventKeys = new HashMap<String, String>();
+      public Map<String, Long> eventValues = new HashMap<String, Long>();
+      public Map<String, Object> others = new HashMap<String, Object>();
+      public EventData() { }
+    }
+
+    ArrayList<EventData> eventDataList = new ArrayList<EventData>();
+    public int maxNumMetrics = 512;
 
     public StubEmitterGroup(DatagramSocketEventEmitter<?>[] emitters,
                             EventFactory eventFactory) {
@@ -93,26 +101,99 @@ public class ClientTest {
       // go through the event and populate the maps with the entries in the event
       // that start with "t", "k" or "v"
       MapEvent me = (MapEvent)event;
+      EventData ed = new EventData();
       for(String key : me.getEventAttributes()) {
         if(key.startsWith("t")) {
-          eventTypes.put(key, me.getString(key));
+          ed.eventTypes.put(key, me.getString(key));
         } else if (key.startsWith("k")) {
-          eventKeys.put(key, me.getString(key));
+          ed.eventKeys.put(key, me.getString(key));
         } else if (key.startsWith("v")) {
-          eventValues.put(key, me.getInt64(key));
+          ed.eventValues.put(key, me.getInt64(key));
         } else {
-          others.put(key, me.get(key));
+          ed.others.put(key, me.get(key));
         }
       }
 
+      eventDataList.add(ed);
       return 0;
     }
 
     public void clearMaps() {
-      eventTypes.clear();
-      eventKeys.clear();
-      eventValues.clear();
-      others.clear();
+      eventDataList.clear();
+    }
+
+    public String getEventTypes(int idx)
+    {
+      int fieldIdx = idx % maxNumMetrics;
+      int mapIdx = idx / maxNumMetrics;
+
+      EventData ed = eventDataList.get(mapIdx);
+      return ed.eventTypes.get("t" + fieldIdx);
+    }
+
+    public String getEventKeys(int idx)
+    {
+      int fieldIdx = idx % maxNumMetrics;
+      int mapIdx = idx / maxNumMetrics;
+
+      EventData ed = eventDataList.get(mapIdx);
+      return ed.eventKeys.get("k" + fieldIdx);
+    }
+
+    public Long getEventValues(int idx)
+    {
+      int fieldIdx = idx % maxNumMetrics;
+      int mapIdx = idx / maxNumMetrics;
+
+      EventData ed = eventDataList.get(mapIdx);
+      return ed.eventValues.get("v" + fieldIdx);
+    }
+
+    public Object[] getOthers(String key)
+    {
+      Object o[] = new Object[eventDataList.size()];
+      int i = 0;
+      for (EventData ed : eventDataList)
+      {
+        Object v = ed.others.get(key);
+        o[i++] = v;
+      }
+      return o;
+    }
+
+    public int eventTypesSize()
+    {
+      int sz = 0;
+      for (EventData ed : eventDataList)
+      {
+        sz += ed.eventTypes.size();
+      }
+      return sz;
+    }
+
+    public int eventKeysSize()
+    {
+      int sz = 0;
+      for (EventData ed : eventDataList)
+      {
+        sz += ed.eventKeys.size();
+      }
+      return sz;
+    }
+
+    public int eventValuesSize()
+    {
+      int sz = 0;
+      for (EventData ed : eventDataList)
+      {
+        sz += ed.eventValues.size();
+      }
+      return sz;
+    }
+
+    public int getEventsNumber()
+    {
+      return eventDataList.size();
     }
   }
 
@@ -291,18 +372,18 @@ public class ClientTest {
                                                  context);
 
     assertTrue(ret);
-    assertEquals(g.others.get("id"), "mondemand-java");
-    assertEquals(g.others.get("caller_label"), "junit");
-    assertEquals(g.others.get("num"), 2);
-    assertEquals(g.others.get("label0"), "a");
-    assertEquals(g.others.get("label1"), "b");
-    assertEquals(g.others.get("ctxt_num"), 1);
-    assertEquals(g.others.get("ctxt_k0"), "context_test_key");
-    assertEquals(g.others.get("ctxt_v0"), "context_test_val");
-    assertEquals(g.others.get("start0"), start0);
-    assertEquals(g.others.get("start1"), start1);
-    assertEquals(g.others.get("end0"), end0);
-    assertEquals(g.others.get("end1"), end1);
+    assertEquals(g.getOthers("id")[0], "mondemand-java");
+    assertEquals(g.getOthers("caller_label")[0], "junit");
+    assertEquals(g.getOthers("num")[0], 2);
+    assertEquals(g.getOthers("label0")[0], "a");
+    assertEquals(g.getOthers("label1")[0], "b");
+    assertEquals(g.getOthers("ctxt_num")[0], 1);
+    assertEquals(g.getOthers("ctxt_k0")[0], "context_test_key");
+    assertEquals(g.getOthers("ctxt_v0")[0], "context_test_val");
+    assertEquals(g.getOthers("start0")[0], start0);
+    assertEquals(g.getOthers("start1")[0], start1);
+    assertEquals(g.getOthers("end0")[0], end0);
+    assertEquals(g.getOthers("end1")[0], end1);
   }
 
   /**
@@ -408,18 +489,18 @@ public class ClientTest {
           // we check something like "t1=gauge", "k1=SomeKey_0_min", "v1=10",
           // "t2=gauge", "k2=SomeKey_0_pctl_95", "v2=9500", all extra stats
           // are gauges
-          assertEquals(g.eventTypes.get("t" + idx), "gauge");
-          assertEquals(g.eventKeys.get("k" + idx), key + trackType.keySuffix);
+          assertEquals(g.getEventTypes(idx), "gauge");
+          assertEquals(g.getEventKeys(idx), key + trackType.keySuffix);
 
           if(trackType.value == SampleTrackType.AVG.value) {
-            assertEquals(g.eventValues.get("v" + idx).longValue(),
+            assertEquals(g.getEventValues(idx).longValue(),
                 (long)(total/inputSize));
           } else if(trackType.value == SampleTrackType.SUM.value) {
-            assertEquals(g.eventValues.get("v" + idx).longValue(), total);
+            assertEquals(g.getEventValues(idx).longValue(), total);
           } else if(trackType.value == SampleTrackType.COUNT.value) {
-            assertEquals(g.eventValues.get("v" + idx).longValue(), inputSize);
+            assertEquals(g.getEventValues(idx).longValue(), inputSize);
           } else {
-            assertEquals(g.eventValues.get("v" + idx).longValue(),
+            assertEquals(g.getEventValues(idx).longValue(),
                 samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
                     trackType.indexInSamples)).intValue()  );
           }
@@ -427,9 +508,9 @@ public class ClientTest {
         }
       }
       // finally make sure no other key/value/types are set.
-      assertNull(g.eventTypes.get("t" + idx));
-      assertNull(g.eventKeys.get("t" + idx));
-      assertNull(g.eventValues.get("t" + idx));
+      assertEquals(g.eventTypesSize(), idx * 2);
+      assertEquals(g.eventKeysSize(), idx * 2);
+      assertEquals(g.eventValuesSize(), idx * 2);
 
       // reset emitter
       g.clearMaps();
@@ -462,7 +543,7 @@ public class ClientTest {
       emitterGroup.set(localLwesTransport, g);
 
       // create a bunch of regular counter stats
-      int Count = 100;
+      int Count = 500;
       for(int cnt=0; cnt<Count; ++cnt) {
         client.increment("key_" + cnt, cnt);
       }
@@ -475,63 +556,66 @@ public class ClientTest {
 
       // make sure Count*2 number of type/key/values are emitted, one for regular
       // counter,  and one for avg value of the samples.
-      assertEquals(g.eventTypes.size(), Count*2);
-      assertEquals(g.eventKeys.size(), Count*2);
-      assertEquals(g.eventValues.size(), Count*2);
+      assertEquals(g.eventTypesSize(), Count*2);
+      assertEquals(g.eventKeysSize(), Count*2);
+      assertEquals(g.eventValuesSize(), Count*2);
 
       // now check the type/key/values in the emitter object
       for(int idx=0; idx<Count*2; ++idx) {
-        assertNotNull(g.eventKeys.get("k" + idx));
+        assertNotNull(g.getEventKeys(idx));
         // extract the key
-        String key = g.eventKeys.get("k" + idx);
+        String key = g.getEventKeys(idx);
         int val = 0;
         if(key.startsWith("key_")) {
           // regular key
-          assertEquals(g.eventTypes.get("t" + idx), "counter");
+          assertEquals(g.getEventTypes(idx), "counter");
           val = Integer.parseInt(key.substring( "key_".length() ));
         } else if(key.startsWith("samplekey_")) {
           // average for sample key
-          assertEquals(g.eventTypes.get("t" + idx), "gauge");
+          assertEquals(g.getEventTypes(idx), "gauge");
           String s = key.substring( "samplekey_".length() );
           val = Integer.parseInt(s.substring(0, s.indexOf("_avg")));
         } else {
           // should never happen.
           assertNotNull(null);
         }
-        assertEquals(g.eventValues.get("v" + idx).longValue(), val);
+        assertEquals(g.getEventValues(idx).longValue(), val);
       }
 
+      assertEquals(g.getEventsNumber(), 2);
+      assertEquals(g.getOthers("prog_id")[1], g.getOthers("prog_id")[0]);
+      assertThat(g.getOthers("num")[1], not(equalTo(g.getOthers("num")[0])));
       g.clearMaps();
 
       // now sleep for 1.2 sec without emiting anything
       Thread.sleep(1200);
       if(keepOrDropStats[kods]) {
         // we are reseting all stats, there should not be anything emitted
-        assertEquals(g.eventTypes.size(), 0);
-        assertEquals(g.eventKeys.size(), 0);
-        assertEquals(g.eventValues.size(), 0);
+        assertEquals(g.eventTypesSize(), 0);
+        assertEquals(g.eventKeysSize(), 0);
+        assertEquals(g.eventValuesSize(), 0);
       } else {
         // we are not reseting the stats, the same keys with the same values should be emitted
         // the value for averages for sample counter should be 0 since average is a gauge
         // sample is cleared therefore we any got to Count not Count*2
         for(int idx=0; idx<Count; ++idx) {
-          assertNotNull(g.eventKeys.get("k" + idx));
+          assertNotNull(g.getEventKeys(idx));
           // extract the key
-          String key = g.eventKeys.get("k" + idx);
+          String key = g.getEventKeys(idx);
           int val = 0;
           if(key.startsWith("key_")) {
             // regular key
-            assertEquals(g.eventTypes.get("t" + idx), "counter");
+            assertEquals(g.getEventTypes(idx), "counter");
             val = Integer.parseInt(key.substring( "key_".length() ));
           } else if(key.startsWith("samplekey_")) {
             // average for sample key, should be reset to 0
-            assertEquals(g.eventTypes.get("t" + idx), "gauge");
+            assertEquals(g.getEventTypes(idx), "gauge");
             val = 0;
           } else {
             // should never happen.
             assertNotNull(null);
           }
-          assertEquals(g.eventValues.get("v" + idx).longValue(), val);
+          assertEquals(g.getEventValues(idx).longValue(), val);
         }
       }
 

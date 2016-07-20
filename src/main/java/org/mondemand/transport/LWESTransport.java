@@ -17,24 +17,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Properties;
 
-import org.mondemand.Config;
-import org.mondemand.Context;
-import org.mondemand.LogMessage;
-import org.mondemand.SamplesMessage;
-import org.mondemand.StatType;
-import org.mondemand.StatsMessage;
-import org.mondemand.SampleTrackType;
-import org.mondemand.TraceId;
-import org.mondemand.Transport;
-import org.mondemand.TransportException;
 import org.lwes.Event;
 import org.lwes.EventFactory;
 import org.lwes.EventSystemException;
 import org.lwes.emitter.EmitterGroup;
 import org.lwes.emitter.EmitterGroupBuilder;
-import org.lwes.emitter.EventEmitter;
-import org.lwes.emitter.MulticastEventEmitter;
-import org.lwes.emitter.UnicastEventEmitter;
+import org.mondemand.Config;
+import org.mondemand.Context;
+import org.mondemand.LogMessage;
+import org.mondemand.SampleTrackType;
+import org.mondemand.SamplesMessage;
+import org.mondemand.StatType;
+import org.mondemand.StatsMessage;
+import org.mondemand.TraceId;
+import org.mondemand.Transport;
+import org.mondemand.TransportException;
 
 public class LWESTransport
   implements Transport
@@ -51,6 +48,7 @@ public class LWESTransport
    * Instance attributes *
    ***********************/
   private EmitterGroup emitterGroup = null;
+  private Integer maxNumMetrics = null;
 
   /**
    * Creates an initializes a LWES transport.
@@ -106,6 +104,12 @@ public class LWESTransport
     } catch (Exception e) {
       throw new TransportException("Unable to initialize emitter group", e);
     }
+  }
+
+  public LWESTransport setMaxNumMetrics(Integer maxNumMetrics)
+  {
+    this.maxNumMetrics = maxNumMetrics;
+    return this;
   }
 
   public void sendLogs (String programId,
@@ -167,24 +171,22 @@ public class LWESTransport
    */
   public void send(String programId, StatsMessage[] stats,
       SamplesMessage[] samples, Context[] contexts) throws TransportException {
+    if (contexts == null || emitterGroup == null)
+    {
+      return;
+    }
 
-    // create the event
-    Event event = emitterGroup.createEvent(STATS_EVENT, false);
-    event.setString("prog_id", programId);
+    try
+    {
+      StatsMessageStreamer sms = new StatsMessageStreamer(programId, contexts, emitterGroup, maxNumMetrics);
 
-    // keeps the number of attributes that are being added to the event when
-    // setting stats and samples in the event (excluding contexts)
-    int idx = 0;
-    idx = sendStats(event, stats, contexts, idx);
-    idx = sendSamples(event, samples, idx);
-
-    event.setUInt16("num", idx);
-
-    // finally emit the event
-    try {
-      emitterGroup.emitToGroup(event);
-    } catch(Exception e) {
-      throw new TransportException("Error sending log event", e);
+      sendStats(sms, stats);
+      sendSamples(sms, samples);
+      sms.flush();
+    }
+    catch (EventSystemException e)
+    {
+      throw new TransportException("Error sending stats event", e);
     }
 
   }
@@ -197,33 +199,21 @@ public class LWESTransport
    * @param idx - beginning index for the entries in the event
    * @return index of last entry added to the event
    */
-  public int sendStats (Event event, StatsMessage[] messages,
-      Context[] contexts, int idx) {
-    if (messages == null || messages.length == 0
-        || contexts == null || emitterGroup == null)
-      return idx;
+  public void sendStats (StatsMessageStreamer sms, StatsMessage[] messages) {
+    if (messages == null || messages.length == 0)
+    {
+      return;
+    }
 
     // for each statistic, set the values
     for(StatsMessage msg: messages) {
       synchronized(msg) {
         // synchronize on msg to make sure some other threads are not updating it
         // at the same time, otherwise there may be exception during sorting
-        setLwesEvent(event, msg.getType().toString(), msg.getKey(),
-            msg.getCounter(), idx);
-        idx++;
+        sms.addMetric(msg.getType().toString(), msg.getKey(),
+            msg.getCounter());
       }
     }
-
-    // set the contextual data in the event
-    if(contexts.length > 0) {
-      event.setUInt16("ctxt_num", contexts.length);
-      for(int i=0; i<contexts.length; ++i) {
-        event.setString("ctxt_k" + i, contexts[i].getKey());
-        event.setString("ctxt_v" + i, contexts[i].getValue());
-      }
-    }
-
-    return idx;
   }
 
   /**
@@ -233,10 +223,10 @@ public class LWESTransport
    * @param idx - beginning index for the entries in the event
    * @return index of last entry added to the event
    */
-  public int sendSamples (Event event, SamplesMessage[] messages,
-      int idx) {
-    if (messages == null || messages.length == 0 || emitterGroup == null) {
-      return idx;
+  public void sendSamples (StatsMessageStreamer sms, SamplesMessage[] messages) {
+    if (messages == null || messages.length == 0)
+    {
+      return;
     }
 
     // for each statistic, set the values
@@ -245,27 +235,9 @@ public class LWESTransport
         // synchronize on msg to make sure some other threads are not updating it
         // at the same time, otherwise there may be exception during sorting
         // add messages for extra stats for samples
-        idx = updateLwesEventForSamples(event, msg, idx);
+        updateLwesEventForSamples(sms, msg);
       }
     }
-
-    return idx;
-  }
-
-
-  /**
-   * sets a type/key/value in an lwes event object's message part
-   * @param event - the lwes event object
-   * @param type - the event's type
-   * @param key - the event's key
-   * @param value - the event's value
-   * @param index - the index used for the type/key/value
-   */
-  protected void setLwesEvent(Event event, String type, String key, long value,
-      int index) {
-    event.setString("t" + index, type);
-    event.setString("k" + index, key);
-    event.setInt64("v" + index, value);
   }
 
   /**
@@ -274,10 +246,8 @@ public class LWESTransport
    * @param event - the lwes event to be updated
    * @param msg - the StatsMessage object to update the event
    * @param index - the index to be incremented and used to lwes event
-   * @return the last index that was added in this method.
    */
-  protected int updateLwesEventForSamples(Event event, SamplesMessage msg,
-      int index) {
+  protected void updateLwesEventForSamples(StatsMessageStreamer sms, SamplesMessage msg) {
     // already synchronized on msg in the calling method
     if(msg.getTrackingTypeValue() > 0) {
       // first sort the samples
@@ -306,14 +276,104 @@ public class LWESTransport
           }
           // "_min", "_max", ... will be added to the original key
           // all these stats are gauges.
-          setLwesEvent(event, StatType.Gauge.toString(),
-                msg.getKey() + trackType.keySuffix, value, index);
-          index++;
+          sms.addMetric(StatType.Gauge.toString(),
+                msg.getKey() + trackType.keySuffix, value);
         }
       }
     }
 
-    return index;
+    return;
+  }
+
+  /**
+   * StatsMessageStreamer is a class that will take care of sending the lwes
+   * events that contain all stats and samples metrics, ensuring that each event
+   * does not contain more than MAXIMUM_METRICS metrics.  Metrics are added by
+   * calling addMetric, and a call to flush should be done once all metrics have
+   * been added.
+   */
+  class StatsMessageStreamer {
+    final String program_id;
+    Context[] contexts;
+    static final int DEFAULT_MAXIMUM_METRICS = 512;
+    int max_metrics;
+    int num_metrics = 0;
+    Event statsMsg;
+    EmitterGroup emitterGroup;
+
+    StatsMessageStreamer (String program_id, Context[] contexts, EmitterGroup emitterGroup, Integer max_metrics)
+      throws EventSystemException
+    {
+      this.program_id = program_id;
+      this.contexts = contexts;
+      this.emitterGroup = emitterGroup;
+      this.max_metrics = (null == max_metrics) ? DEFAULT_MAXIMUM_METRICS : max_metrics;
+
+      initializeEvent();
+    }
+
+    /**
+     * create an event instance and reset num_metrics
+     */
+    void initializeEvent ()
+      throws EventSystemException
+    {
+      statsMsg = emitterGroup.createEvent(STATS_EVENT, false);
+    }
+
+    /**
+     * add any keys that are expected to be in each event and the context, and
+     * emit the event.
+     */
+    void emitMessage ()
+    {
+      statsMsg.setString("prog_id", program_id);
+      statsMsg.setUInt16("num", num_metrics);
+      statsMsg.setUInt16("ctxt_num", contexts.length);
+      for (int i = 0; i < contexts.length; ++i) {
+        statsMsg.setString("ctxt_k" + i, contexts[i].getKey());
+        statsMsg.setString("ctxt_v" + i, contexts[i].getValue());
+      }
+
+      emitterGroup.emitToGroup(statsMsg);
+
+      num_metrics = 0;
+    }
+
+    /**
+     * flush any remaining data
+     */
+    void flush()
+    {
+      /*
+       * only emit if there are 1 or more metrics.  Is there any reason to send
+       * an event that has only context data and no metrics?
+       */
+      if (num_metrics > 0)
+      {
+        emitMessage();
+      }
+    }
+
+    /**
+     * sets a type/key/value in an lwes event object's message part
+     * @param type - the event's type
+     * @param key - the event's key
+     * @param value - the event's value
+     */
+    void addMetric(String type, String key, long value)
+    {
+      if (num_metrics == max_metrics)
+      {
+        // this resets num_metrics to 0
+        emitMessage();
+        initializeEvent();
+      }
+      statsMsg.setString("t" + num_metrics, type);
+      statsMsg.setString("k" + num_metrics, key);
+      statsMsg.setInt64("v" + num_metrics, value);
+      num_metrics++;
+    }
   }
 
   private static final String PROG_ID_KEY  = "mondemand.prog_id";
