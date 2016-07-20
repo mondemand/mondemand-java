@@ -43,12 +43,13 @@ public class LWESTransport
   private static final String PERF_EVENT  = "MonDemand::PerfMsg";
   private static final String STATS_EVENT = "MonDemand::StatsMsg";
   private static final String TRACE_EVENT = "MonDemand::TraceMsg";
+  private static final int DEFAULT_MAXIMUM_METRICS = 512;
 
   /***********************
    * Instance attributes *
    ***********************/
   private EmitterGroup emitterGroup = null;
-  private Integer maxNumMetrics = null;
+  private Integer maxNumMetrics = DEFAULT_MAXIMUM_METRICS;
 
   /**
    * Creates an initializes a LWES transport.
@@ -108,7 +109,7 @@ public class LWESTransport
 
   public LWESTransport setMaxNumMetrics(Integer maxNumMetrics)
   {
-    this.maxNumMetrics = maxNumMetrics;
+    this.maxNumMetrics = (null == maxNumMetrics) ? DEFAULT_MAXIMUM_METRICS : maxNumMetrics;
     return this;
   }
 
@@ -290,27 +291,26 @@ public class LWESTransport
    * been added.
    */
   class StatsMessageStreamer {
-    final String program_id;
+    final String programId;
     Context[] contexts;
-    static final int DEFAULT_MAXIMUM_METRICS = 512;
-    int max_metrics;
-    int num_metrics = 0;
+    int maxMetrics;
+    int numMetrics = 0;
     Event statsMsg;
     EmitterGroup emitterGroup;
 
-    StatsMessageStreamer (String program_id, Context[] contexts, EmitterGroup emitterGroup, Integer max_metrics)
+    StatsMessageStreamer (String programId, Context[] contexts, EmitterGroup emitterGroup, Integer maxMetrics)
       throws EventSystemException
     {
-      this.program_id = program_id;
+      this.programId = programId;
       this.contexts = contexts;
       this.emitterGroup = emitterGroup;
-      this.max_metrics = (null == max_metrics) ? DEFAULT_MAXIMUM_METRICS : max_metrics;
+      this.maxMetrics = maxMetrics;
 
       initializeEvent();
     }
 
     /**
-     * create an event instance and reset num_metrics
+     * create an event instance and reset numMetrics
      */
     private void initializeEvent ()
       throws EventSystemException
@@ -324,8 +324,8 @@ public class LWESTransport
      */
     private void emitMessage ()
     {
-      statsMsg.setString("prog_id", program_id);
-      statsMsg.setUInt16("num", num_metrics);
+      statsMsg.setString("prog_id", programId);
+      statsMsg.setUInt16("num", numMetrics);
       statsMsg.setUInt16("ctxt_num", contexts.length);
       for (int i = 0; i < contexts.length; ++i) {
         statsMsg.setString("ctxt_k" + i, contexts[i].getKey());
@@ -334,7 +334,7 @@ public class LWESTransport
 
       emitterGroup.emitToGroup(statsMsg);
 
-      num_metrics = 0;
+      numMetrics = 0;
     }
 
     /**
@@ -346,7 +346,7 @@ public class LWESTransport
        * only emit if there are 1 or more metrics.  Is there any reason to send
        * an event that has only context data and no metrics?
        */
-      if (num_metrics > 0)
+      if (numMetrics > 0)
       {
         emitMessage();
       }
@@ -360,16 +360,16 @@ public class LWESTransport
      */
     void addMetric(String type, String key, long value)
     {
-      if (num_metrics == max_metrics)
+      if (numMetrics == maxMetrics)
       {
-        // this resets num_metrics to 0
+        // this resets numMetrics to 0
         emitMessage();
         initializeEvent();
       }
-      statsMsg.setString("t" + num_metrics, type);
-      statsMsg.setString("k" + num_metrics, key);
-      statsMsg.setInt64("v" + num_metrics, value);
-      num_metrics++;
+      statsMsg.setString("t" + numMetrics, type);
+      statsMsg.setString("k" + numMetrics, key);
+      statsMsg.setInt64("v" + numMetrics, value);
+      numMetrics++;
     }
   }
 
