@@ -191,11 +191,8 @@ public class LWESTransport
 
   /**
    * sends all the stats
-   * @param event - event to set the stats in
+   * @param sms - the StatsMessageStreamer to be updated
    * @param messages - stats
-   * @param contexts - contexts
-   * @param idx - beginning index for the entries in the event
-   * @return index of last entry added to the event
    */
   public void sendStats (StatsMessageStreamer sms, StatsMessage[] messages) {
     if (messages == null || messages.length == 0)
