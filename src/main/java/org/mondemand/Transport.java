@@ -18,7 +18,8 @@ public interface Transport {
     throws TransportException;
 
   public void send(String programId, StatsMessage[] stats,
-                   SamplesMessage[] samples, Context[] contexts)
+                   SamplesMessage[] samples, Context[] contexts,
+                   Integer maxNumMetrics)
     throws TransportException;
 
   public void sendTrace(String programId, Context[] contexts)

@@ -1,3 +1,10 @@
+Version 7.0.0
+  * added support for sending metrics using multiple lwes events rather than a
+    single one
+  * added setMaxNumMetrics to Client to set limit on metrics per lwes event,
+    defaults to 512
+  * Tansports interface changed
+
 Version 6.0.0
   * modified Client to maintain an event type to transport map
   * fixed latent bug in emission of sample metrics

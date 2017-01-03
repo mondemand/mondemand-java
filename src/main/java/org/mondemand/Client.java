@@ -14,12 +14,10 @@ package org.mondemand;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.io.IOException;
-import java.net.InetAddress;
+import java.io.InputStream;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -71,6 +69,7 @@ public class Client {
   private ConcurrentHashMap<EventType, List<Transport>> transports = null;
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
+  private Integer maxNumMetrics = null;
 
   /********************************
    * CONSTRUCTORS AND DESTRUCTORS *
@@ -314,6 +313,14 @@ public class Client {
     if(errorHandler != null) {
       this.errorHandler = errorHandler;
     }
+  }
+
+  /**
+   * @param maxNumMetrics the maximum number of metrics to send in stats messages
+   */
+  public void setMaxNumMetrics(Integer maxNumMetrics)
+  {
+    this.maxNumMetrics = maxNumMetrics;
   }
 
   /********************************
@@ -1264,7 +1271,7 @@ public class Client {
 
       for (Transport t : transports.get(EventType.STATS)) {
         try {
-          t.send(programId, statsMsgs, samplesMsgs, contexts);
+          t.send(programId, statsMsgs, samplesMsgs, contexts, this.maxNumMetrics);
         } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
@@ -1301,7 +1308,7 @@ public class Client {
       for (Transport t : transports.get(EventType.STATS)) {
         try {
           t.send(programId, statsMsgs.toArray(new StatsMessage[0]), null,
-                 contexts);
+                 contexts, this.maxNumMetrics);
         } catch(TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()",
                                    te);
