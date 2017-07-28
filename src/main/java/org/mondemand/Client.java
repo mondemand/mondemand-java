@@ -534,9 +534,6 @@ public class Client {
         contextStats.clear();
       }
     }
-    if(samples != null) {
-      samples.clear();
-    }
   }
 
   /**
@@ -601,12 +598,16 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
+    // Note: increment could be lost due to a race condition but no
+    //       synchronization is required.
     StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
-      realValue = new StatsMessage(realKey, type);
-      this.stats.putIfAbsent(realKey, realValue);
-      realValue = this.stats.get(realKey);
+      StatsMessage newValue = new StatsMessage(realKey, type);
+      realValue = this.stats.putIfAbsent(realKey, newValue);
+      if(realValue == null) {
+        realValue = newValue;
+      }
     }
     // update the counter
     realValue.incrementBy(value);
@@ -620,12 +621,16 @@ public class Client {
    */
   public void increment(ContextList context, String keyType, long value)
   {
+    // Note: add could be lost due to a race condition but no
+    //       synchronization is required.
     AtomicLongMap<String> stats = contextStats.get(context);
     if (stats == null)
     {
-      stats = AtomicLongMap.create();
-      contextStats.putIfAbsent(context, stats);
-      stats = contextStats.get(context);
+      AtomicLongMap<String> newStats = AtomicLongMap.create();
+      stats = contextStats.putIfAbsent(context, newStats);
+      if(stats == null) {
+        stats = newStats;
+      }
     }
     stats.addAndGet(keyType, value);
   }
@@ -674,12 +679,18 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
+    // Note: sample could be lost if we get the SamplesMessage but fail to
+    //       add the sample before the SamplesMessage is emitted.
+    //       This approach avoids synchronization though.
     SamplesMessage realValue = (SamplesMessage) this.samples.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
-      realValue = new SamplesMessage(realKey, trackingTypeValue, samplesMaxCount);
-      this.samples.putIfAbsent(realKey, realValue);
-      realValue = this.samples.get(realKey);
+      SamplesMessage newValue =
+          new SamplesMessage(realKey, trackingTypeValue, samplesMaxCount);
+      realValue = this.samples.putIfAbsent(realKey, newValue);
+      if(realValue == null) {
+        realValue = newValue;
+      }
     }
     // update the counter
     realValue.addSample(value);
@@ -1267,7 +1278,7 @@ public class Client {
 
       // snapshot samples map for dispatch
       SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
-      this.samples = new ConcurrentHashMap<String, SamplesMessage>();
+      this.samples = new ConcurrentHashMap<String, SamplesMessage>(this.samples.size());
 
       for (Transport t : transports.get(EventType.STATS)) {
         try {
