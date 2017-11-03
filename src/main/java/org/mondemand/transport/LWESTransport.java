@@ -13,8 +13,7 @@
 package org.mondemand.transport;
 
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Map;
 import java.util.Properties;
 
 import org.lwes.Event;
@@ -106,6 +105,7 @@ public class LWESTransport
     }
   }
 
+  @Override
   public void sendLogs (String programId,
                         LogMessage[] messages,
                         Context[] contexts)
@@ -163,6 +163,7 @@ public class LWESTransport
    * @param contexts - contexts
    * @throws TransportException
    */
+  @Override
   public void send(String programId, StatsMessage[] stats,
       SamplesMessage[] samples, Context[] contexts, Integer maxNumMetrics)
     throws TransportException
@@ -202,12 +203,7 @@ public class LWESTransport
 
     // for each statistic, set the values
     for(StatsMessage msg: messages) {
-      synchronized(msg) {
-        // synchronize on msg to make sure some other threads are not updating it
-        // at the same time, otherwise there may be exception during sorting
-        sms.addMetric(msg.getType().toString(), msg.getKey(),
-            msg.getCounter());
-      }
+      sms.addMetric(msg.getType().toString(), msg.getKey(), msg.getCounter());
     }
   }
 
@@ -224,12 +220,7 @@ public class LWESTransport
 
     // for each statistic, set the values
     for(SamplesMessage msg: messages) {
-      synchronized(msg) {
-        // synchronize on msg to make sure some other threads are not updating it
-        // at the same time, otherwise there may be exception during sorting
-        // add messages for extra stats for samples
-        updateLwesEventForSamples(sms, msg);
-      }
+      updateLwesEventForSamples(sms, msg);
     }
   }
 
@@ -240,41 +231,12 @@ public class LWESTransport
    * @param msg - the StatsMessage object to update the event
    */
   protected void updateLwesEventForSamples(StatsMessageStreamer sms, SamplesMessage msg) {
-    // already synchronized on msg in the calling method
-    if(msg.getTrackingTypeValue() > 0) {
-      // first sort the samples
-      ArrayList<Integer> sortedSamples = msg.getSamples();
-      Collections.sort(sortedSamples);
-
-      // go through all the trackTypes and if one is set for the counter, emit that
-      for(SampleTrackType trackType: SampleTrackType.values()) {
-        if( (msg.getTrackingTypeValue() & trackType.value) == trackType.value) {
-          // default value (in case samples were not updated since last emit)
-          long value = 0;
-          if(sortedSamples.size() > 0) {
-            // values for average, sum and count are not coming from sortedSamples
-            if(trackType.value == SampleTrackType.AVG.value) {
-              value = msg.getCounter()/msg.getUpdateCounts();
-            } else if(trackType.value == SampleTrackType.SUM.value) {
-              value = msg.getCounter();
-            } else if(trackType.value == SampleTrackType.COUNT.value) {
-              value = msg.getUpdateCounts();
-            } else {
-              value = sortedSamples.get((int)( (sortedSamples.size() - 1) * trackType.indexInSamples));
-            }
-          } else {
-            // samples were not updated, i.e., no increment since the last
-            // emit, so send a value of 0
-          }
-          // "_min", "_max", ... will be added to the original key
-          // all these stats are gauges.
-          sms.addMetric(StatType.Gauge.toString(),
-                msg.getKey() + trackType.keySuffix, value);
-        }
-      }
+    for (Map.Entry<SampleTrackType, Long> stat : msg.getStats().entrySet()) {
+      // "_min", "_max", ... will be added to the original key
+      // all these stats are gauges.
+      sms.addMetric(StatType.Gauge.toString(),
+          msg.getKey() + stat.getKey().keySuffix, stat.getValue());
     }
-
-    return;
   }
 
   /**
@@ -370,6 +332,7 @@ public class LWESTransport
   private static final String PROG_ID_KEY  = "mondemand.prog_id";
   private static final String SRC_HOST_KEY = "mondemand.src_host";
 
+  @Override
   public void sendTrace (String programId,
                          Context[] contexts)
     throws TransportException
@@ -400,6 +363,7 @@ public class LWESTransport
   private static final String PERF_START_PREFIX = "start";
   private static final String PERF_END_PREFIX = "end";
 
+  @Override
   public void sendPerformanceTrace(String id, String callerLabel,
                                    String[] label, long[] start,
                                    long[] end, Context[] contexts)
@@ -447,6 +411,7 @@ public class LWESTransport
     }
   }
 
+  @Override
   public void shutdown()
     throws TransportException
   {

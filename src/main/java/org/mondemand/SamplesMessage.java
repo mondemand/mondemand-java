@@ -1,8 +1,14 @@
 package org.mondemand;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Random;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.LongAdder;
 
 /**
  * object for a sample message
@@ -11,17 +17,22 @@ import java.util.Random;
 public class SamplesMessage implements Serializable  {
   private static final long serialVersionUID = 3447528863504915877L;
 
-  private String key = null;
+  private static final SampleTrackType[] SAMPLE_TRACK_TYPE_VALUES = SampleTrackType.values();
+
+  private final String key;
   private final StatType type = StatType.Gauge;   // stat type for samples is always gauge
 
-  private ArrayList<Integer> samples = null;          // a sample of entries
   public static final int MAX_SAMPLES_COUNT = 1000;   // default max number of sample entries to keep
-  private int samplesMaxCount;          // max number of sample entries to keep
-  private long counter = 0;             // counter since stats are emitted.
-  private int updateCounts = 0;         // number of times the object is updated
-  private int trackingTypeValue = 0;    // bitwise value to specify what extra
-                                        // stats to keep for a sample counter
-  Random rand = new Random();
+  private final int samplesMaxCount; // max number of sample entries to keep
+
+  // Data fields. These aren't updated together atomically so there may be
+  // discrepancies if the emit occurs during an update
+  private final LongAdder counter = new LongAdder(); // counter since stats are emitted.
+  private final AtomicInteger updateCounts = new AtomicInteger(); // number of times the object is updated
+  private final AtomicIntegerArray samples; // a sample of entries
+
+  private final int trackingTypeValue; // bitwise value to specify what extra
+                                       // stats to keep for a sample counter
 
   /**
    * constructor
@@ -35,7 +46,7 @@ public class SamplesMessage implements Serializable  {
     this.key = key;
     this.trackingTypeValue = trackingTypeValue;
     this.samplesMaxCount = (samplesMaxCount <= 0 ? MAX_SAMPLES_COUNT : samplesMaxCount);
-    samples = new ArrayList<Integer>(this.samplesMaxCount);
+    samples = new AtomicIntegerArray(this.samplesMaxCount);
   }
 
   /**
@@ -52,33 +63,21 @@ public class SamplesMessage implements Serializable  {
    * adds a new sample to the list of samples
    * @param value - value of the sample
    */
-  public void addSample(int value) {
-    // synchronize on this object so it won't be updated while another
-    // thread is sending this instance's stats
-    synchronized(this) {
-      counter += value;
-      updateCounts++;
-      if(samples.size() < samplesMaxCount) {
-        // add new value to samples if it has space
-        samples.add(value);
-      } else {
-        // otherwise, replace one of the entries with the new value
-        // with the probability of "samplesCount / UpdateCounts"
-        int indexToReplace = rand.nextInt(updateCounts);   // from 0 to UpdateCounts-1
-        if( indexToReplace < samplesMaxCount) {
-          samples.set(indexToReplace, value);
-        }
+  public boolean addSample(int value) {
+    int prevCount = updateCounts.getAndIncrement();
+    counter.add(value);
+    if (prevCount < samplesMaxCount) {
+      // add new value to samples if it has space
+      samples.set(prevCount, value);
+    } else {
+      // otherwise, replace one of the entries with the new value
+      // with the probability of "samplesCount / UpdateCounts"
+      int indexToReplace = ThreadLocalRandom.current().nextInt(prevCount); // from 0 to UpdateCounts-1
+      if (indexToReplace < samplesMaxCount) {
+        samples.set(indexToReplace, value);
       }
     }
-  }
-
-  /**
-   * this method should be called after emission of this object
-   */
-  public void resetSamples() {
-    samples.clear();
-    counter = 0;
-    updateCounts = 0;
+    return true;
   }
 
   /**
@@ -92,14 +91,19 @@ public class SamplesMessage implements Serializable  {
    * @return the total count value for this object
    */
   public long getCounter() {
-    return counter;
+    return counter.sum();
   }
 
   /**
-   * @return samples for this counter
+   * @return copy of samples for this counter
    */
-  public ArrayList<Integer> getSamples() {
-    return samples;
+  public int[] getSamples() {
+    long counts = getUpdateCounts();
+    int[] samplesCopy = new int[(int)Math.min(counts, samples.length())];
+    for (int i = 0; i < samplesCopy.length; ++i) {
+      samplesCopy[i] = samples.get(i);
+    }
+    return samplesCopy;
   }
 
   /**
@@ -113,7 +117,7 @@ public class SamplesMessage implements Serializable  {
    * @return number of times this counter has been updated since last emission.
    */
   public int getUpdateCounts() {
-    return updateCounts;
+    return updateCounts.get();
   }
 
   /**
@@ -130,4 +134,51 @@ public class SamplesMessage implements Serializable  {
     return type;
   }
 
+  /**
+   * Gets the current stats specified by the sample track types specified when object
+   * was constructed
+   * @return map of stats
+   */
+  public Map<SampleTrackType, Long> getStats() {
+    if (trackingTypeValue == 0) {
+      return Collections.emptyMap();
+    }
+
+    long counts = getUpdateCounts();
+    long total = getCounter();
+    int[] sortedSamples = getSamples();
+    // first sort the samples
+    Arrays.sort(sortedSamples);
+
+    Map<SampleTrackType, Long> stats = new EnumMap<>(SampleTrackType.class);
+
+    for (SampleTrackType trackType : SAMPLE_TRACK_TYPE_VALUES) {
+      if ((trackingTypeValue & trackType.value)  != 0) {
+        // default value (in case samples were not updated since last emit)
+        long value = 0;
+        if (counts > 0) {
+          // values for average, sum and count are not coming from sortedSamples
+          switch (trackType) {
+            case AVG:
+              value = total / counts;
+              break;
+            case SUM:
+              value = total;
+              break;
+            case COUNT:
+              value = counts;
+              break;
+            default:
+              value = sortedSamples[(int)((sortedSamples.length - 1) * trackType.indexInSamples)];
+              break;
+          }
+        } else {
+          // samples were not updated, i.e., no increment since the last
+          // emit, so send a value of 0
+        }
+        stats.put(trackType, value);
+      }
+    }
+    return stats;
+  }
 }

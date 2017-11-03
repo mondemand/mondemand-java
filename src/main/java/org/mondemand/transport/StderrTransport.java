@@ -12,8 +12,7 @@
 
 package org.mondemand.transport;
 
-import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Map;
 
 import org.mondemand.Context;
 import org.mondemand.Level;
@@ -28,6 +27,7 @@ public class StderrTransport implements Transport {
   public StderrTransport() {
   }
 
+  @Override
   public void sendLogs (String programId,
                         LogMessage[] messages,
                         Context[] contexts)
@@ -50,6 +50,7 @@ public class StderrTransport implements Transport {
     }
   }
 
+  @Override
   public void send (String programId,
       StatsMessage[] stats,
       SamplesMessage[] samples,
@@ -79,42 +80,17 @@ public class StderrTransport implements Transport {
   public void sendSamples(String programId, SamplesMessage[] messages) {
     if(messages == null) return;
 
-    for(SamplesMessage msg: messages) {
-      if(msg.getTrackingTypeValue() > 0) {
-        // first sort the samples
-        ArrayList<Integer> sortedSamples = msg.getSamples();
-        Collections.sort(sortedSamples);
-
-        // go through all the trackTypes and if one is set for the counter, log that
-        for(SampleTrackType trackType: SampleTrackType.values()) {
-          if( (msg.getTrackingTypeValue() & trackType.value) == trackType.value) {
-            // default value (in case samples were not updated since last log)
-            long value = 0;
-            if(sortedSamples.size() != 0) {
-              // values for average, sum and count are not coming from sortedSamples
-              if(trackType.value == SampleTrackType.AVG.value) {
-                value = msg.getCounter()/msg.getUpdateCounts();
-              } else if(trackType.value == SampleTrackType.SUM.value) {
-                value = msg.getCounter();
-              } else if(trackType.value == SampleTrackType.COUNT.value) {
-                value = msg.getUpdateCounts();
-              } else {
-                value = sortedSamples.get((int)( (sortedSamples.size() - 1) * trackType.indexInSamples));
-              }
-            } else {
-              // samples were not updated, i.e., no increment since the last
-              // log, so log a value of 0
-            }
-            // "min_", "max_", ... will be added to the original key
-            System.err.println("["+programId+"] " + msg.getType() + " : "
-                + msg.getKey() + trackType.keySuffix + " : "
-                + value);
-          }
-        }
+    for (SamplesMessage msg : messages) {
+      for (Map.Entry<SampleTrackType, Long> stat : msg.getStats().entrySet()) {
+        // "_min", "_max", ... will be added to the original key
+        System.err.println("["+programId+"] " + msg.getType() + " : " +
+            msg.getKey() + stat.getKey().keySuffix + " : " +
+            stat.getValue());
       }
     }
  }
 
+  @Override
   public void sendTrace (String programId,
                          Context[] contexts)
   {
@@ -128,6 +104,7 @@ public class StderrTransport implements Transport {
     }
   }
 
+  @Override
   public void sendPerformanceTrace(String id, String callerLabel,
                                    String[] label, long[] start,
                                    long[] end, Context[] contexts)
@@ -142,6 +119,7 @@ public class StderrTransport implements Transport {
     }
   }
 
+  @Override
   public void shutdown() {
     // do nothing
   }

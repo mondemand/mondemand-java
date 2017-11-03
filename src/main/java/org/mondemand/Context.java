@@ -29,6 +29,7 @@ public class Context implements Serializable {
   /**
    * @param key the key to set
    */
+  @Deprecated
   public void setKey(String key) {
     this.key = key;
   }
@@ -43,11 +44,9 @@ public class Context implements Serializable {
   /**
    * @param value the value to set
    */
+  @Deprecated
   public void setValue(String value) {
     this.value = value;
-  }
-
-  public Context() {
   }
 
   public Context(String k, String v) {

@@ -29,7 +29,7 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
@@ -76,14 +76,14 @@ public class ClientTest {
     // since there may be multiple events sent for one set of metrics, collect
     // each one's data separately
     class EventData {
-      public Map<String, String> eventTypes = new HashMap<String, String>();
-      public Map<String, String> eventKeys = new HashMap<String, String>();
-      public Map<String, Long> eventValues = new HashMap<String, Long>();
-      public Map<String, Object> others = new HashMap<String, Object>();
+      public Map<String, String> eventTypes = new HashMap<>();
+      public Map<String, String> eventKeys = new HashMap<>();
+      public Map<String, Long> eventValues = new HashMap<>();
+      public Map<String, Object> others = new HashMap<>();
       public EventData() { }
     }
 
-    ArrayList<EventData> eventDataList = new ArrayList<EventData>();
+    ArrayList<EventData> eventDataList = new ArrayList<>();
     public int maxNumMetrics = 512;
 
     public StubEmitterGroup(DatagramSocketEventEmitter<?>[] emitters,
@@ -249,9 +249,7 @@ public class ClientTest {
 
   @Test
   public void testBasicStructures() {
-    Context ctxt = new Context();
-    ctxt.setKey("a");
-    ctxt.setValue("b");
+    Context ctxt = new Context("a", "b");
     assertEquals(ctxt.getKey(), "a");
     assertEquals(ctxt.getValue(), "b");
 
@@ -404,7 +402,7 @@ public class ClientTest {
     long start1 = now - 1000;
     long end0 = now + 5000;
     long end1 = now + 10000;
-    Map<String, String> context = new HashMap<String, String>();
+    Map<String, String> context = new HashMap<>();
 
     context.put("context_test_key", "context_test_val");
 
@@ -515,9 +513,9 @@ public class ClientTest {
       // get the samples for the stats for the given key
       @SuppressWarnings("unchecked")
       ConcurrentHashMap<String, SamplesMessage> clientSamples = (ConcurrentHashMap<String,SamplesMessage>)sampleStats.get(client);
-      ArrayList<Integer> samples = new ArrayList<Integer>(clientSamples.get(key).getSamples());
-      Collections.copy(samples, clientSamples.get(key).getSamples());
-      Collections.sort(samples);
+      SamplesMessage clientSample = clientSamples.get(key);
+      int[] samples = Arrays.copyOf(clientSample.getSamples(), Math.min(clientSample.getUpdateCounts(), clientSample.getSamples().length));
+      Arrays.sort(samples);
 
       // trigger send()
       client.flush(true);
@@ -537,15 +535,15 @@ public class ClientTest {
 
           if(trackType.value == SampleTrackType.AVG.value) {
             assertEquals(g.getEventValues(idx).longValue(),
-                (long)(total/inputSize));
+                total/inputSize);
           } else if(trackType.value == SampleTrackType.SUM.value) {
             assertEquals(g.getEventValues(idx).longValue(), total);
           } else if(trackType.value == SampleTrackType.COUNT.value) {
             assertEquals(g.getEventValues(idx).longValue(), inputSize);
           } else {
             assertEquals(g.getEventValues(idx).longValue(),
-                samples.get( (int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
-                    trackType.indexInSamples)).intValue()  );
+                samples[(int) ( (Math.min(inputSize, SamplesMessage.MAX_SAMPLES_COUNT)-1) *
+                    trackType.indexInSamples)]);
           }
           idx++;
         }
@@ -772,7 +770,7 @@ public class ClientTest {
       // everything valid
       mondemandConfigFile = File.createTempFile("mondemand_config_", ".tmp");
       output = new FileOutputStream(mondemandConfigFile);
-      List<String> addresses = new ArrayList<String>();
+      List<String> addresses = new ArrayList<>();
       addresses.add("127.0.0.1");
       addresses.add("127.0.0.2");
       addresses.add("224.1.2.200");
@@ -1008,7 +1006,7 @@ public class ClientTest {
     InetAddress address = InetAddress.getLocalHost();
     Transport t = new LWESTransport(address, 9292, null);
     c.addTransport(t);
-    Map<String,String> myContext = new HashMap<String,String>();
+    Map<String,String> myContext = new HashMap<>();
     myContext.put("apple","cat");
     myContext.put("dog","5");
     assertEquals (c.traceMessage ("owner_1", "trace_id_1",
@@ -1040,41 +1038,10 @@ public class ClientTest {
     ClientTestTransport transport = new ClientTestTransport();
     client.addTransport(transport);
 
-    Field contexts = client.getClass().getDeclaredField("contexts");
-    contexts.setAccessible(true);
     Field transports = client.getClass().getDeclaredField("transports");
     transports.setAccessible(true);
-    Field stats = client.getClass().getDeclaredField("stats");
-    stats.setAccessible(true);
-    Field messages = client.getClass().getDeclaredField("messages");
-    messages.setAccessible(true);
-
-    contexts.set(client, null);
-    client.addContext("test1", "test2");
-
-    contexts.set(client, null);
-    client.getContextKeys();
 
     client.addTransport(null);
-
-    stats.set(client, null);
-    client.increment();
-
-    stats.set(client, null);
-    client.setKey(null, 123);
-
-    contexts.set(client, null);
-    client.flushLogs();
-    client.flush();
-    client.getContextKeys();
-
-    stats.set(client,null);
-    client.flushLogs();
-    client.flush();
-    client.setKey(null, 1);
-
-    messages.set(client, null);
-    client.log(Level.DEBUG, null, "abc123", new String[] { "test" });
   }
 
   @Test
@@ -1114,7 +1081,7 @@ public class ClientTest {
     appender.setAddress("127.0.0.1");
     appender.activateOptions();
 
-    HashMap<String,Object> properties = new HashMap<String,Object>();
+    HashMap<String,Object> properties = new HashMap<>();
     properties.put("key1", "value1");
 
     LoggingEvent event = new LoggingEvent("ClientTest", Logger.getRootLogger(), 0L, org.apache.log4j.Level.ERROR,
@@ -1322,6 +1289,7 @@ public class ClientTest {
     for (int j=0; j<10; j++)
     {
       class IncrementThread implements Runnable {
+        @Override
         public void run()
         {
           for (int i=0; i< 1000; i++)
@@ -1380,6 +1348,7 @@ public class ClientTest {
     {
 
       class IncrementThread implements Runnable {
+        @Override
         public void run()
         {
           for (int i=0; i< 100; i++)

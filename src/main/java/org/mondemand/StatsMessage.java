@@ -13,6 +13,7 @@
 package org.mondemand;
 
 import java.io.Serializable;
+import java.util.concurrent.atomic.LongAdder;
 
 import org.mondemand.StatType;
 
@@ -21,7 +22,7 @@ public class StatsMessage implements Serializable {
 
   private String key = null;
   private StatType type = StatType.Unknown;
-  private long counter = 0;
+  private LongAdder counter = new LongAdder();
 
   /**
    * constructor
@@ -52,7 +53,7 @@ public class StatsMessage implements Serializable {
    * @return the counter
    */
   public long getCounter() {
-    return counter;
+    return counter.sum();
   }
 
   /**
@@ -60,18 +61,16 @@ public class StatsMessage implements Serializable {
    * @param value - value to increment by
    */
   public void incrementBy(int value) {
-    // synchronize on this object so it won't be updated while another
-    // thread is sending this instance's stats
-    synchronized(this) {
-      counter += value;
-    }
+    counter.add(value);
   }
 
   /**
    * @param counter the counter to set
    */
   public void setCounter(long counter) {
-    this.counter = counter;
+    // Not atomic but this should be ok
+    this.counter.reset();
+    this.counter.add(counter);
   }
 
   /**
@@ -89,6 +88,7 @@ public class StatsMessage implements Serializable {
     this.type = type;
   }
 
+  @Override
   public String toString() {
     return type + " : " + key + " : " + counter;
   }

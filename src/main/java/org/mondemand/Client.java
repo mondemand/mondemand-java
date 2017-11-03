@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -61,14 +62,14 @@ public class Client {
   private String programId = null;
   private int immediateSendLevel = Level.CRIT;
   private int noSendLevel = Level.ALL;
-  private ConcurrentHashMap<String,Context> contexts = null;
-  private ConcurrentHashMap<String,LogMessage> messages = null;
-  private ConcurrentHashMap<String,StatsMessage> stats = null;
-  private ConcurrentHashMap<String,SamplesMessage> samples = null;
-  private ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats = null;
-  private ConcurrentHashMap<EventType, List<Transport>> transports = null;
-  private ClientStatEmitter autoStatEmitter = null;
-  private Thread emitterThread = null;
+  private final ConcurrentHashMap<String,Context> contexts;
+  private volatile ConcurrentHashMap<String,LogMessage> messages;
+  private volatile ConcurrentHashMap<String,StatsMessage> stats;
+  private volatile ConcurrentHashMap<String,SamplesMessage> samples;
+  private volatile ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStats;
+  private final ConcurrentHashMap<EventType, List<Transport>> transports;
+  private final ClientStatEmitter autoStatEmitter;
+  private final Thread emitterThread;
   private Integer maxNumMetrics = null;
 
   /********************************
@@ -107,6 +108,7 @@ public class Client {
      * then emit the stats, and keep doing the same until it is interrupted to
      * stop
      */
+    @Override
     public void run() {
       while(!stop) {
         try {
@@ -143,12 +145,12 @@ public class Client {
     }
 
     /* setup internal data structures */
-    contexts = new ConcurrentHashMap<String,Context>();
-    messages = new ConcurrentHashMap<String,LogMessage>();
-    stats = new ConcurrentHashMap<String,StatsMessage>();
-    samples = new ConcurrentHashMap<String,SamplesMessage>();
-    transports = new ConcurrentHashMap<EventType, List<Transport>>();
-    contextStats = new ConcurrentHashMap<ContextList, AtomicLongMap<String>>();
+    contexts = new ConcurrentHashMap<>();
+    messages = new ConcurrentHashMap<>();
+    stats = new ConcurrentHashMap<>();
+    samples = new ConcurrentHashMap<>();
+    transports = new ConcurrentHashMap<>();
+    contextStats = new ConcurrentHashMap<>();
 
     // initialize transports with empty lists
     for (EventType eventType : EventType.values()) {
@@ -162,6 +164,10 @@ public class Client {
       autoStatEmitter = new ClientStatEmitter(this, statEmitInterval, clearStatAfterEmit);
       emitterThread = new Thread( autoStatEmitter );
       emitterThread.start();
+    }
+    else {
+      autoStatEmitter = null;
+      emitterThread = null;
     }
   }
 
@@ -222,22 +228,13 @@ public class Client {
         autoStatEmitter.stop();
         emitterThread.interrupt();
         emitterThread.join();
-        autoStatEmitter = null;
-        emitterThread = null;
       } catch (Exception e) {
         // ignore the exception for join
       }
     }
 
-    // clear all the data
-    contexts.clear();
-    messages.clear();
-    stats.clear();
-    samples.clear();
-    contextStats.clear();
-
     // shutdown all the transports
-    Set<Transport> seenTransports = new HashSet<Transport>();
+    Set<Transport> seenTransports = new HashSet<>();
 
     for (List<Transport> transportList : transports.values()) {
       for (Transport t : transportList) {
@@ -331,13 +328,8 @@ public class Client {
    * Adds contextual data to the client.
    */
   public void addContext(String key, String value) {
-    Context ctxt = new Context();
-    ctxt.setKey(key);
-    ctxt.setValue(value);
+    Context ctxt = new Context(key, value);
 
-    if(contexts == null) {
-      contexts = new ConcurrentHashMap<String,Context>();
-    }
     if(key != null && value != null) {
       contexts.put(key, ctxt);
     }
@@ -347,7 +339,7 @@ public class Client {
    * Removes contextual data from the client.
    */
   public void removeContext(String key) {
-    if(contexts != null && key != null) {
+    if(key != null) {
       contexts.remove(key);
     }
   }
@@ -358,8 +350,8 @@ public class Client {
   public String getContext(String key) {
     String retval = null;
 
-    if(contexts != null && key != null) {
-      Context ctxt = (Context) contexts.get(key);
+    if(key != null) {
+      Context ctxt = contexts.get(key);
       if(ctxt != null) {
         retval = ctxt.getValue();
       }
@@ -374,9 +366,6 @@ public class Client {
    * @return an enumeration of all keys
    */
   public Enumeration<String> getContextKeys() {
-    if (contexts == null) {
-      contexts = new ConcurrentHashMap<String,Context>();
-    }
     return contexts.keys();
   }
 
@@ -385,9 +374,7 @@ public class Client {
    * flush() calls and is only removed if you call removeAllContexts().
    */
   public void removeAllContexts() {
-    if(contexts != null) {
-      contexts.clear();
-    }
+    contexts.clear();
   }
 
   /**
@@ -523,27 +510,40 @@ public class Client {
    * @param resetStats - whether or not stats should be reset after flush
    */
   public void flush(boolean resetStats) {
-    flushLogs();
-    dispatchStatsSamples();
-    dispatchContextStats();
-    if(resetStats) {
-      if(stats != null) {
-        stats.clear();
-      }
-      if (contextStats != null) {
-        contextStats.clear();
-      }
+    Context[] currentContext = contexts.values().toArray(new Context[0]);
+    flushLogs(currentContext);
+
+    ConcurrentHashMap<String,StatsMessage> prevStats = stats;
+    ConcurrentHashMap<ContextList, AtomicLongMap<String>> prevContextStats = contextStats;
+    if (resetStats) {
+      stats = new ConcurrentHashMap<>(prevStats.size());
+      contextStats = new ConcurrentHashMap<>(prevContextStats.size());
     }
+    // Always reset samples
+    ConcurrentHashMap<String,SamplesMessage> prevSamples = samples;
+    samples = new ConcurrentHashMap<>(prevSamples.size());
+
+    StatsMessage[] prevStatsArray = prevStats.values().toArray(new StatsMessage[0]);
+    SamplesMessage[] prevSamplesArray = prevSamples.values().toArray(new SamplesMessage[0]);
+    dispatchStatsSamples(prevStatsArray, prevSamplesArray, currentContext);
+    dispatchContextStats(prevContextStats, currentContext);
   }
 
   /**
    * Flushes log data to the transports.
    */
   public void flushLogs() {
-    dispatchLogs();
-    if(messages != null) {
-      messages.clear();
-    }
+    Context[] currentContext = contexts.values().toArray(new Context[0]);
+    flushLogs(currentContext);
+  }
+
+  /**
+   * Flushes log data to the transports.
+   */
+  private void flushLogs(Context[] currentContext) {
+    ConcurrentHashMap<String,LogMessage> prevMessages = messages;
+    messages = new ConcurrentHashMap<>(prevMessages.size());
+    dispatchLogs(prevMessages, currentContext);
   }
 
   /**
@@ -575,7 +575,7 @@ public class Client {
    * @param value the amount to increment the counter by
    */
   public void increment(String key, int value) {
-    this.increment (StatType.Counter, key, value);
+    this.increment(StatType.Counter, key, value);
   }
 
   /**
@@ -584,13 +584,8 @@ public class Client {
    * @param key - the name of the counter to increment
    * @param value - the amount to increment the counter by
    */
-  public void increment (StatType type, String key, int value) {
+  public void increment(StatType type, String key, int value) {
     String realKey = key;
-
-    // create the HashMap if it doesn't exist
-    if(this.stats == null) {
-      this.stats = new ConcurrentHashMap<String,StatsMessage>();
-    }
 
     // set the key
     if(realKey == null) {
@@ -600,7 +595,7 @@ public class Client {
 
     // Note: increment could be lost due to a race condition but no
     //       synchronization is required.
-    StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
+    StatsMessage realValue = this.stats.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
       StatsMessage newValue = new StatsMessage(realKey, type);
@@ -640,7 +635,7 @@ public class Client {
    * @param context : context
    * @param keyType : KeyType: blank, advertiser_revenue, etc
    */
-  public void increment(ContextList context, String keyType )
+  public void increment(ContextList context, String keyType)
   {
     increment(context, keyType, 1);
   }
@@ -668,11 +663,6 @@ public class Client {
   public void addSample(String key, int value, int trackingTypeValue, int samplesMaxCount) {
     String realKey = key;
 
-    // create the HashMap if it doesn't exist
-    if(this.samples == null) {
-      this.samples = new ConcurrentHashMap<String,SamplesMessage>();
-    }
-
     // set the key
     if(realKey == null) {
       // determine the key from the calling class and line number
@@ -682,7 +672,7 @@ public class Client {
     // Note: sample could be lost if we get the SamplesMessage but fail to
     //       add the sample before the SamplesMessage is emitted.
     //       This approach avoids synchronization though.
-    SamplesMessage realValue = (SamplesMessage) this.samples.get(realKey);
+    SamplesMessage realValue = this.samples.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
       SamplesMessage newValue =
@@ -738,7 +728,7 @@ public class Client {
    * @param value the value to set this counter to
    */
   public void setKey(String key, int value) {
-    this.setKey(StatType.Gauge, key, (long) value);
+    this.setKey(StatType.Gauge, key, value);
   }
 
   /**
@@ -747,7 +737,7 @@ public class Client {
    * @param value the value to set this counter to
    */
   public void setKey(String key, long value) {
-    this.setKey(StatType.Gauge, key, (long) value);
+    this.setKey(StatType.Gauge, key, value);
   }
 
   public void setKey(StatType type, String key, long value) {
@@ -760,7 +750,7 @@ public class Client {
 
     // create the HashMap if it doesn't exist
     if(this.stats == null) {
-      this.stats = new ConcurrentHashMap<String,StatsMessage>();
+      this.stats = new ConcurrentHashMap<>();
     }
 
     // create and set the gauge counter, this will overwrite the counter
@@ -1073,7 +1063,7 @@ public class Client {
                                Map<String, String> context) {
     boolean ret = false;
     try {
-      List<Context> contextsList = new ArrayList<Context>(context.size() + 3);
+      List<Context> contextsList = new ArrayList<>(context.size() + 3);
       contextsList.add(new Context(OWNER_KEY, owner));
       contextsList.add(new Context(TRACE_KEY, traceId));
       contextsList.add(new Context(MESSAGE_KEY, message));
@@ -1123,7 +1113,7 @@ public class Client {
     boolean ret = false;
 
     try {
-      List<Context> contextList = new ArrayList<Context>();
+      List<Context> contextList = new ArrayList<>();
 
       for (Entry<String,String> entry : context.entrySet()) {
         contextList.add(new Context(entry.getKey(), entry.getValue()));
@@ -1165,11 +1155,6 @@ public class Client {
           name + ":" + line + " with invalid log level: " + Integer.toString(level));
     }
 
-    // initialize if necessary
-    if(this.messages == null) {
-      this.messages = new ConcurrentHashMap<String, LogMessage>();
-    }
-
     // format the message
     formattedMsg.append(message);
     if(args != null) {
@@ -1188,7 +1173,7 @@ public class Client {
         String key = filename + FILE_LINE_DELIMITER + Integer.toString(line);
         if(this.messages.containsKey(key)) {
           // repeated message, increment the repeat counter
-          LogMessage msg = (LogMessage) this.messages.get(key);
+          LogMessage msg = this.messages.get(key);
           if(msg != null) {
             msg.setRepeat(msg.getRepeat() + 1);
             if(msg.getRepeat() % 999 == 0) {
@@ -1238,17 +1223,18 @@ public class Client {
   /**
    * Iterates through the transports, calling the sendLogs method for each.
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
+   * @param messagesToEmit messages to emit
+   * @param currentContext current context for the logs
    */
-  private synchronized void dispatchLogs() {
-    if (this.messages == null) return;
-
+  private synchronized void dispatchLogs(
+      ConcurrentHashMap<String,LogMessage> messagesToEmit,
+      Context[] currentContext) {
     try {
-      Context[] contexts = this.contexts.values().toArray(new Context[0]);
-      LogMessage[] messages = this.messages.values().toArray(new LogMessage[0]);
+      LogMessage[] messages = messagesToEmit.values().toArray(new LogMessage[0]);
 
       for (Transport t : transports.get(EventType.LOG)) {
         try {
-          t.sendLogs(programId, messages, contexts);
+          t.sendLogs(programId, messages, currentContext);
         } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendLogs()", te);
         }
@@ -1262,25 +1248,25 @@ public class Client {
    * Iterates through the transports, calling the send() method for each to send
    * all the stats and samples.
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
+   * @param statsToEmit counter stats to emit
+   * @param samplesToEmit sample stats to emit
+   * @param currentContext current context for the stats
    */
-  private synchronized void dispatchStatsSamples() {
-    if  ((this.samples == null || this.samples.isEmpty()) &&
-         (this.stats == null || this.stats.isEmpty()))
+  private synchronized void dispatchStatsSamples(
+      StatsMessage[] statsToEmit,
+      SamplesMessage[] samplesToEmit,
+      Context[] currentContext)
+  {
+    if ((statsToEmit == null || statsToEmit.length == 0) &&
+        (samplesToEmit == null || samplesToEmit.length == 0))
     {
       return;
     }
 
     try {
-      Context[] contexts = this.contexts.values().toArray(new Context[0]);
-      StatsMessage[] statsMsgs = this.stats.values().toArray(new StatsMessage[0]);
-
-      // snapshot samples map for dispatch
-      SamplesMessage[] samplesMsgs = this.samples.values().toArray(new SamplesMessage[0]);
-      this.samples = new ConcurrentHashMap<String, SamplesMessage>(this.samples.size());
-
       for (Transport t : transports.get(EventType.STATS)) {
         try {
-          t.send(programId, statsMsgs, samplesMsgs, contexts, this.maxNumMetrics);
+          t.send(programId, statsToEmit, samplesToEmit, currentContext, this.maxNumMetrics);
         } catch (TransportException te) {
           errorHandler.handleError("Error calling Transport.sendStats()", te);
         }
@@ -1292,18 +1278,23 @@ public class Client {
 
   /**
    * emit the events
+   * @param contextStatsToEmit context stats to emit
+   * @param currentContext current context for the stats
    */
-  private synchronized void dispatchContextStats()
+  private synchronized void dispatchContextStats(
+      ConcurrentHashMap<ContextList, AtomicLongMap<String>> contextStatsToEmit,
+      Context[] currentContext)
   {
-    if (this.contextStats == null || this.contextStats.isEmpty()) {
+    if (contextStatsToEmit == null || contextStatsToEmit.isEmpty()) {
       return;
     }
 
-    for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStats.entrySet())
+    for (Map.Entry<ContextList, AtomicLongMap<String>> entry : contextStatsToEmit.entrySet())
     {
-      List<Context> newContexts = new ArrayList<Context>(this.contexts.values());
+      List<Context> newContexts = new ArrayList<>(currentContext.length + entry.getKey().getList().size());
+      Collections.addAll(newContexts, currentContext);
       newContexts.addAll(entry.getKey().getList());
-      List<StatsMessage> statsMsgs = new ArrayList<StatsMessage>();
+      List<StatsMessage> statsMsgs = new ArrayList<>();
 
       for (Map.Entry<String, Long> stat : entry.getValue().asMap().entrySet())
       {
