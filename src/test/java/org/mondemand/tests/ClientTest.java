@@ -576,7 +576,6 @@ public class ClientTest {
       assertEquals(g.eventValuesSize(), 0);
 
       // add samples
-      // add stats
       try {
         client.addSample(invalidKey, 100, 1);
         // fail if we are not throwing exception
@@ -596,7 +595,7 @@ public class ClientTest {
    * @throws Exception
    */
   @Test
-  public void testStatsWithValidKeys() throws Exception {
+  public void testStatsSamplesWithValidKeys() throws Exception {
     String[] validKeys = {"valid", "valid_with_underscore", "valid.with.dot", "valid-with-dash", "valid-with.numbers_090"};
 
     // stats
@@ -679,12 +678,12 @@ public class ClientTest {
     String[] validKeys = {"valid", "valid_with_underscore", "valid.with.dot", "valid-with-dash",
         "valid_with_numbers_090", "valid_with-all.chars090"};
     for(String validKey : validKeys) {
-      assertTrue(Client.keyIsValid(validKey));
+      assertTrue(Client.isKeyValid(validKey));
     }
     String[] invalidKeys = {null, "", "with space", "with_invalid_chars_%", "with_invalid_chars_$",
         "with_invalid_chars_+", "with_invalid_chars_:", "with_invalid_chars_="};
     for(String invalidKey : invalidKeys) {
-      assertFalse(Client.keyIsValid(invalidKey));
+      assertFalse(Client.isKeyValid(invalidKey));
     }
   }
 

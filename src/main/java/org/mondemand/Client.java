@@ -345,7 +345,7 @@ public class Client {
     if(value == null || value.isEmpty()) {
       throw new MondemandException("value is empty or null");
     }
-    if(!keyIsValid(key)) {
+    if(!isKeyValid(key)) {
       throw new MondemandException("key is invalid: " + key);
     }
 
@@ -413,15 +413,12 @@ public class Client {
    * @return true if the key consists of valid characters, false if otherwise
    *         or key is empty.
    */
-  public static boolean keyIsValid(String key) {
+  public static boolean isKeyValid(String key) {
     if(key == null || key.isEmpty()) {
       return false;
     }
     Matcher matcher = keyPattern.matcher(key);
-    if(!matcher.matches()) {
-      return false;
-    }
-    return true;
+    return matcher.matches();
   }
 
   /**
@@ -632,7 +629,7 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
-    if(!keyIsValid(realKey)) {
+    if(!isKeyValid(realKey)) {
       throw new MondemandException("key is invalid: " + realKey);
     }
 
@@ -665,7 +662,7 @@ public class Client {
    */
   public void increment(ContextList context, String keyType, long value) throws MondemandException
   {
-    if(!keyIsValid(keyType)) {
+    if(!isKeyValid(keyType)) {
       throw new MondemandException("key is invalid: " + keyType);
     }
 
@@ -723,7 +720,7 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
-    if(!keyIsValid(realKey)) {
+    if(!isKeyValid(realKey)) {
       throw new MondemandException("key is invalid: " + realKey);
     }
 
@@ -815,7 +812,7 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
-    if(!keyIsValid(realKey)) {
+    if(!isKeyValid(realKey)) {
       throw new MondemandException("key is invalid: " + realKey);
     }
 
