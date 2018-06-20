@@ -4,7 +4,7 @@
   <groupId>org.mondemand</groupId>
   <artifactId>mondemand-java</artifactId>
   <packaging>jar</packaging>
-  <version>7.0.1</version>
+  <version>8.0.0</version>
   <name>mondemand-java</name>
   <description>MonDemand java implementation</description>
   <url>http://mondemand.org</url>
@@ -50,6 +50,16 @@
       <type>jar</type>
       <version>1.2.16</version>
       <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+      <version>2.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.4</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>

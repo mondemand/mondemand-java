@@ -57,6 +57,7 @@ import org.mondemand.ErrorHandler;
 import org.mondemand.EventType;
 import org.mondemand.Level;
 import org.mondemand.LogMessage;
+import org.mondemand.MondemandException;
 import org.mondemand.SampleTrackType;
 import org.mondemand.SamplesMessage;
 import org.mondemand.StatType;
@@ -241,17 +242,32 @@ public class ClientTest {
   }
 
   @Test
-  public void testClientCreateWithHostname() throws UnknownHostException {
+  public void testClientCreateWithHostname() throws UnknownHostException, MondemandException {
     String host = InetAddress.getLocalHost().getHostName();
     Client c = new Client("my-test", host);
     assertEquals(host, c.getContext("host"));
   }
 
   @Test
-  public void testBasicStructures() {
-    Context ctxt = new Context();
-    ctxt.setKey("a");
-    ctxt.setValue("b");
+  public void testBasicStructures() throws MondemandException {
+    // invalid contexts
+    try {
+      new Context(null, "value");
+      // should throw exception, fail otherwise
+      fail();
+    } catch(MondemandException e) {}
+    try {
+      new Context("key", null);
+      // should throw exception, fail otherwise
+      fail();
+    } catch(MondemandException e) {}
+    try {
+      new Context("invalid key", "value");
+      // should throw exception, fail otherwise
+      fail();
+    } catch(MondemandException e) {}
+
+    Context ctxt = new Context("a", "b");
     assertEquals(ctxt.getKey(), "a");
     assertEquals(ctxt.getValue(), "b");
 
@@ -312,7 +328,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testSetContexts() {
+  public void testSetContexts() throws MondemandException {
     Client client = createClient();
     for(int i=0; i<1000; ++i) {
       client.addContext("key" + i, "value" + i);
@@ -344,20 +360,9 @@ public class ClientTest {
 
   @Test
   public void testMaxNumMetrics() throws Exception {
-    Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
-    client.addTransport(localLwesTransport);
-    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
-    emitterGroup.setAccessible(true);
-    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
-    emitters.setAccessible(true);
-    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
-    eventFactory.setAccessible(true);
-    StubEmitterGroup g =
-       new StubEmitterGroup(
-           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
-           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
-    emitterGroup.set(localLwesTransport, g);
+    Client client = createLwesClient(localLwesTransport);
+    StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
 
     int count = 100;
     client.addContext("test1", "test2");
@@ -385,20 +390,10 @@ public class ClientTest {
 
   @Test
   public void testPerformanceTrace() throws Exception {
-    Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
-    client.addTransport(localLwesTransport);
-    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
-    emitterGroup.setAccessible(true);
-    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
-    emitters.setAccessible(true);
-    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
-    eventFactory.setAccessible(true);
-    StubEmitterGroup g =
-       new StubEmitterGroup(
-           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
-           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
-    emitterGroup.set(localLwesTransport, g);
+    Client client = createLwesClient(localLwesTransport);
+    StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
+
     long now = System.currentTimeMillis();
     long start0 = now;
     long start1 = now - 1000;
@@ -439,23 +434,12 @@ public class ClientTest {
    */
   @Test
   public void testSamplesMessages() throws Exception {
-    // create a client, with a transport's emitter that has the emit() stubbed out
-    Client client = createClientNoTransports();
     LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
-    client.addTransport(localLwesTransport);
+    Client client = createLwesClient(localLwesTransport);
     // add a second transport to test stats sample resets
     client.addTransport(localLwesTransport);
-    Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
-    emitterGroup.setAccessible(true);
-    Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
-    emitters.setAccessible(true);
-    Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
-    eventFactory.setAccessible(true);
-    StubEmitterGroup g =
-       new StubEmitterGroup(
-           (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
-           (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
-    emitterGroup.set(localLwesTransport, g);
+    StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
+
     Field sampleStats = client.getClass().getDeclaredField("samples");
     sampleStats.setAccessible(true);
 
@@ -537,7 +521,7 @@ public class ClientTest {
 
           if(trackType.value == SampleTrackType.AVG.value) {
             assertEquals(g.getEventValues(idx).longValue(),
-                (long)(total/inputSize));
+                total/inputSize);
           } else if(trackType.value == SampleTrackType.SUM.value) {
             assertEquals(g.getEventValues(idx).longValue(), total);
           } else if(trackType.value == SampleTrackType.COUNT.value) {
@@ -563,6 +547,148 @@ public class ClientTest {
   }
 
   /**
+   * test invalid keys are not emitted
+   * @throws Exception
+   */
+  @Test
+  public void testStatsWithInvalidKeys() throws Exception {
+
+    String[] invalidKeys = {"", "with space", "with_invalid_chars_%", "with_invalid_chars_$",
+        "with_invalid_chars_+", "with_invalid_chars_:"};
+
+    // stats
+    for(String invalidKey : invalidKeys) {
+      // create a client, with a transport's emitter that has the emit() stubbed out
+      LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+      Client client = createLwesClient(localLwesTransport);
+      StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
+
+      // add stats
+      try {
+        client.increment(invalidKey, 100);
+        // fail if we are not throwing exception
+        fail();
+      } catch(MondemandException e) {}
+      client.flush(true);
+      // nothing should have been emitted.
+      assertEquals(g.eventTypesSize(), 0);
+      assertEquals(g.eventKeysSize(), 0);
+      assertEquals(g.eventValuesSize(), 0);
+
+      // add samples
+      // add stats
+      try {
+        client.addSample(invalidKey, 100, 1);
+        // fail if we are not throwing exception
+        fail();
+      } catch(Exception e) {}
+      client.flush(true);
+      // nothing should have been emitted.
+      assertEquals(g.eventTypesSize(), 0);
+      assertEquals(g.eventKeysSize(), 0);
+      assertEquals(g.eventValuesSize(), 0);
+    }
+
+  }
+
+  /**
+   * test invalid keys are not emitted
+   * @throws Exception
+   */
+  @Test
+  public void testStatsWithValidKeys() throws Exception {
+    String[] validKeys = {"valid", "valid_with_underscore", "valid.with.dot", "valid-with-dash", "valid-with.numbers_090"};
+
+    // stats
+    for(String validKey : validKeys) {
+      // create a client, with a transport's emitter that has the emit() stubbed out
+      LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+      Client client = createLwesClient(localLwesTransport);
+      StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
+
+      // add stats
+      client.finalize();
+      client.increment(validKey, 100);
+      client.flush();
+      // one key/value should be emitted.
+      assertEquals(g.eventTypesSize(), 1);
+      assertEquals(g.eventKeysSize(), 1);
+      assertEquals(g.eventValuesSize(), 1);
+    }
+
+    // samples
+    for(String validKey : validKeys) {
+      // create a client, with a transport's emitter that has the emit() stubbed out
+      LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
+      Client client = createLwesClient(localLwesTransport);
+      StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
+
+      // add samples
+      client.addSample(validKey, 100, 1);
+      client.flush();
+      // one key/value should be emitted.
+      assertEquals(g.eventTypesSize(), 1);
+      assertEquals(g.eventKeysSize(), 1);
+      assertEquals(g.eventValuesSize(), 1);
+    }
+
+  }
+
+  /**
+   * creates and returns a Client object
+   * @return
+   * @throws TransportException
+   * @throws UnknownHostException
+   */
+  protected Client createLwesClient(LWESTransport LwesTransport) throws UnknownHostException, TransportException {
+    Client client = createClientNoTransports("foofoo");
+    client.addTransport(LwesTransport);
+    return client;
+  }
+
+  /**
+   * create a StubEmitterGroup
+   * @param lwesTransport
+   * @return
+   * @throws NoSuchFieldException
+   * @throws SecurityException
+   * @throws IllegalArgumentException
+   * @throws IllegalAccessException
+   */
+  protected StubEmitterGroup createStubEmitterGroup(LWESTransport lwesTransport) throws NoSuchFieldException,
+      SecurityException, IllegalArgumentException, IllegalAccessException {
+    Field emitterGroup = lwesTransport.getClass().getDeclaredField("emitterGroup");
+    emitterGroup.setAccessible(true);
+    Field emitters = emitterGroup.get(lwesTransport).getClass().getDeclaredField("emitters");
+    emitters.setAccessible(true);
+    Field eventFactory = emitterGroup.get(lwesTransport).getClass().getSuperclass().getDeclaredField("factory");
+    eventFactory.setAccessible(true);
+    StubEmitterGroup group =
+        new StubEmitterGroup(
+            (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(lwesTransport)),
+            (EventFactory)eventFactory.get(emitterGroup.get(lwesTransport)));
+     emitterGroup.set(lwesTransport, group);
+     return group;
+  }
+
+  /**
+   * test keyIsValid() method
+   */
+  @Test
+  public void testIsValid() {
+    String[] validKeys = {"valid", "valid_with_underscore", "valid.with.dot", "valid-with-dash",
+        "valid_with_numbers_090", "valid_with-all.chars090"};
+    for(String validKey : validKeys) {
+      assertTrue(Client.keyIsValid(validKey));
+    }
+    String[] invalidKeys = {null, "", "with space", "with_invalid_chars_%", "with_invalid_chars_$",
+        "with_invalid_chars_+", "with_invalid_chars_:", "with_invalid_chars_="};
+    for(String invalidKey : invalidKeys) {
+      assertFalse(Client.keyIsValid(invalidKey));
+    }
+  }
+
+  /**
    * this will test the auto amit feature in the client, one time
    * with reseting the stats after each emit and one time with keeping the stats
    */
@@ -574,17 +700,7 @@ public class ClientTest {
       Client client = new Client("ClientTestSample", true, keepOrDropStats[kods], 1);
       LWESTransport localLwesTransport = new LWESTransport(InetAddress.getLocalHost(), 9292, null);
       client.addTransport(localLwesTransport);
-      Field emitterGroup = localLwesTransport.getClass().getDeclaredField("emitterGroup");
-      emitterGroup.setAccessible(true);
-      Field emitters = emitterGroup.get(localLwesTransport).getClass().getDeclaredField("emitters");
-      emitters.setAccessible(true);
-      Field eventFactory = emitterGroup.get(localLwesTransport).getClass().getSuperclass().getDeclaredField("factory");
-      eventFactory.setAccessible(true);
-      StubEmitterGroup g =
-         new StubEmitterGroup(
-             (DatagramSocketEventEmitter<?>[])emitters.get(emitterGroup.get(localLwesTransport)),
-             (EventFactory)eventFactory.get(emitterGroup.get(localLwesTransport)));
-      emitterGroup.set(localLwesTransport, g);
+      StubEmitterGroup g = createStubEmitterGroup(localLwesTransport);
 
       // create a bunch of regular counter stats
       int Count = 500;
@@ -840,7 +956,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testIncrement() {
+  public void testIncrement() throws MondemandException {
     Client c = createClientNoTransports("testIncrement");
     ClientTestTransport t = new ClientTestTransport();
     c.addTransport(t);
@@ -853,7 +969,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testDecrement() {
+  public void testDecrement() throws MondemandException {
     Client client = createClientNoTransports();
     ClientTestTransport transport = new ClientTestTransport();
     client.addTransport(transport);
@@ -866,12 +982,18 @@ public class ClientTest {
   }
 
   @Test
-  public void testSetKey() {
+  public void testSetKey() throws MondemandException {
     Client client = createClientNoTransports();
     ClientTestTransport transport = new ClientTestTransport();
     client.addTransport(transport);
     client.setKey("testSetKey", 123);
     client.setKey("testSetKeyLong", 123L);
+    // setting invalid keys should be ignored
+    try {
+      client.setKey("invalid key", 234);
+      // fail if we are not throwing exception
+      fail();
+    } catch (MondemandException e) {}
     client.flush();
     assertEquals(transport.stats.length, 2);
   }
@@ -1276,7 +1398,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testIncrementMap()
+  public void testIncrementMap() throws MondemandException
   {
     Client client = createClient();
     Context context = new Context("k1", "v1");
@@ -1286,6 +1408,12 @@ public class ClientTest {
     {
       client.increment(contexts, "key1");
       client.increment(contexts, "key2", 100l);
+      // bad keys should be ignored
+      try {
+        client.increment(contexts, "invalid_key_=", 200L);
+        // fail if we are not throwing exception
+        fail();
+      } catch(MondemandException e) {}
     }
     ContextList contextsCopy = new ContextList();
     contextsCopy.addContext(new Context("k1", "v1"));
@@ -1311,7 +1439,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testMultiThreadIncrement() throws InterruptedException
+  public void testMultiThreadIncrement() throws InterruptedException, MondemandException
   {
     final Client client = createClient();
     Context context1 = new Context("k1", "v1");
@@ -1322,11 +1450,16 @@ public class ClientTest {
     for (int j=0; j<10; j++)
     {
       class IncrementThread implements Runnable {
+        @Override
         public void run()
         {
           for (int i=0; i< 1000; i++)
           {
-            client.increment(contexts, "key1");
+            try {
+              client.increment(contexts, "key1");
+            } catch (MondemandException e) {
+              e.printStackTrace();
+            }
           }
         }
       }
@@ -1350,7 +1483,7 @@ public class ClientTest {
   }
 
   @Test
-  public void testFlush()
+  public void testFlush() throws MondemandException
   {
     Client client = createClient();
     Context context = new Context("k1", "v1");
@@ -1380,11 +1513,16 @@ public class ClientTest {
     {
 
       class IncrementThread implements Runnable {
+        @Override
         public void run()
         {
           for (int i=0; i< 100; i++)
           {
-            client.addSample("k1", 1, 328);
+            try {
+              client.addSample("k1", 1, 328);
+            } catch (MondemandException e) {
+              e.printStackTrace();
+            }
           }
         }
       }

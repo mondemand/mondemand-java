@@ -27,6 +27,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.mondemand.transport.LWESTransport;
 import org.mondemand.util.ClassUtils;
@@ -53,6 +55,8 @@ public class Client {
   private static final int    EMIT_INTERVAL = 60;   // 60 seconds
   private static final boolean DEFAULT_AUTO_EMIT = false;   // auto emit disabled by default
   private static final boolean DEFAULT_CLEAR_STAT = false;  // clear stats after flush by auto emit
+
+  private static final Pattern keyPattern = Pattern.compile("[\\w\\.-]+");     // valid values for key: a-z A-Z 0-9 _ - .
 
   /********************************
    * CLASS ATTRIBUTES             *
@@ -107,6 +111,7 @@ public class Client {
      * then emit the stats, and keep doing the same until it is interrupted to
      * stop
      */
+    @Override
     public void run() {
       while(!stop) {
         try {
@@ -202,8 +207,9 @@ public class Client {
    * The constructor creates a Client object that is ready to use.
    * @param programId a string identifying the program that is calling Mondemand
    * @param host a string identifying the host (i.e. InetAddress.getLocalHost().getHostName()) where the program is running.
+   * @throws MondemandException
    */
-  public Client (String programId, String host) {
+  public Client (String programId, String host) throws MondemandException {
     this(programId);
     addContext("host", host);
   }
@@ -329,11 +335,21 @@ public class Client {
 
   /**
    * Adds contextual data to the client.
+   * @throws MondemandException
    */
-  public void addContext(String key, String value) {
-    Context ctxt = new Context();
-    ctxt.setKey(key);
-    ctxt.setValue(value);
+  public void addContext(String key, String value) throws MondemandException {
+
+    if(key == null) {
+      throw new MondemandException("key is null");
+    }
+    if(value == null || value.isEmpty()) {
+      throw new MondemandException("value is empty or null");
+    }
+    if(!keyIsValid(key)) {
+      throw new MondemandException("key is invalid: " + key);
+    }
+
+    Context ctxt = new Context(key, value);
 
     if(contexts == null) {
       contexts = new ConcurrentHashMap<String,Context>();
@@ -359,7 +375,7 @@ public class Client {
     String retval = null;
 
     if(contexts != null && key != null) {
-      Context ctxt = (Context) contexts.get(key);
+      Context ctxt = contexts.get(key);
       if(ctxt != null) {
         retval = ctxt.getValue();
       }
@@ -388,6 +404,24 @@ public class Client {
     if(contexts != null) {
       contexts.clear();
     }
+  }
+
+  /**
+   * verifies if a key is a valid mondemand key (a-Z A-Z 0-9 _ - .)
+   *
+   * @param key - the input key
+   * @return true if the key consists of valid characters, false if otherwise
+   *         or key is empty.
+   */
+  public static boolean keyIsValid(String key) {
+    if(key == null || key.isEmpty()) {
+      return false;
+    }
+    Matcher matcher = keyPattern.matcher(key);
+    if(!matcher.matches()) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -548,24 +582,27 @@ public class Client {
 
   /**
    * Increments the default counter by one.
+   * @throws MondemandException
    */
-  public void increment() {
+  public void increment() throws MondemandException {
     this.increment(StatType.Counter, null, 1);
   }
 
   /**
    * Increments the default counter by value
    * @param value the amount to increment the counter by
+   * @throws MondemandException
    */
-  public void increment(int value) {
+  public void increment(int value) throws MondemandException {
     this.increment(StatType.Counter, null, value);
   }
 
   /**
    * Increments the specified counter by one.
    * @param key the name of the counter to increment
+   * @throws MondemandException
    */
-  public void increment(String key) {
+  public void increment(String key) throws MondemandException {
     this.increment(StatType.Counter, key, 1);
   }
 
@@ -573,8 +610,9 @@ public class Client {
    * Increments the specified counter by the value specified.
    * @param key the name of the counter to increment
    * @param value the amount to increment the counter by
+   * @throws MondemandException
    */
-  public void increment(String key, int value) {
+  public void increment(String key, int value) throws MondemandException {
     this.increment (StatType.Counter, key, value);
   }
 
@@ -583,14 +621,10 @@ public class Client {
    * @param type - type of the counter
    * @param key - the name of the counter to increment
    * @param value - the amount to increment the counter by
+   * @throws MondemandException
    */
-  public void increment (StatType type, String key, int value) {
+  public void increment (StatType type, String key, int value) throws MondemandException {
     String realKey = key;
-
-    // create the HashMap if it doesn't exist
-    if(this.stats == null) {
-      this.stats = new ConcurrentHashMap<String,StatsMessage>();
-    }
 
     // set the key
     if(realKey == null) {
@@ -598,9 +632,18 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
+    if(!keyIsValid(realKey)) {
+      throw new MondemandException("key is invalid: " + realKey);
+    }
+
+    // create the HashMap if it doesn't exist
+    if(this.stats == null) {
+      this.stats = new ConcurrentHashMap<String,StatsMessage>();
+    }
+
     // Note: increment could be lost due to a race condition but no
     //       synchronization is required.
-    StatsMessage realValue = (StatsMessage) this.stats.get(realKey);
+    StatsMessage realValue = this.stats.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
       StatsMessage newValue = new StatsMessage(realKey, type);
@@ -618,9 +661,14 @@ public class Client {
    * @param context context
    * @param keyType key
    * @param value value
+   * @throws MondemandException
    */
-  public void increment(ContextList context, String keyType, long value)
+  public void increment(ContextList context, String keyType, long value) throws MondemandException
   {
+    if(!keyIsValid(keyType)) {
+      throw new MondemandException("key is invalid: " + keyType);
+    }
+
     // Note: add could be lost due to a race condition but no
     //       synchronization is required.
     AtomicLongMap<String> stats = contextStats.get(context);
@@ -639,8 +687,9 @@ public class Client {
    * Increment the count for the map
    * @param context : context
    * @param keyType : KeyType: blank, advertiser_revenue, etc
+   * @throws MondemandException
    */
-  public void increment(ContextList context, String keyType )
+  public void increment(ContextList context, String keyType ) throws MondemandException
   {
     increment(context, keyType, 1);
   }
@@ -652,7 +701,7 @@ public class Client {
    * @param trackingTypeValue - bitwise value, specifies what extra stats
    *        (min/max/...) should be kept for a counter
    */
-  public void addSample(String key, int value, int trackingTypeValue) {
+  public void addSample(String key, int value, int trackingTypeValue) throws MondemandException {
     this.addSample(key, value, trackingTypeValue, 0);
   }
 
@@ -665,13 +714,8 @@ public class Client {
    * @param samplesMaxCount - maximum number of samples to keep, ignored if
    *        less than or equal to 0.
    */
-  public void addSample(String key, int value, int trackingTypeValue, int samplesMaxCount) {
+  public void addSample(String key, int value, int trackingTypeValue, int samplesMaxCount) throws MondemandException {
     String realKey = key;
-
-    // create the HashMap if it doesn't exist
-    if(this.samples == null) {
-      this.samples = new ConcurrentHashMap<String,SamplesMessage>();
-    }
 
     // set the key
     if(realKey == null) {
@@ -679,10 +723,19 @@ public class Client {
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
     }
 
+    if(!keyIsValid(realKey)) {
+      throw new MondemandException("key is invalid: " + realKey);
+    }
+
+    // create the HashMap if it doesn't exist
+    if(this.samples == null) {
+      this.samples = new ConcurrentHashMap<String,SamplesMessage>();
+    }
+
     // Note: sample could be lost if we get the SamplesMessage but fail to
     //       add the sample before the SamplesMessage is emitted.
     //       This approach avoids synchronization though.
-    SamplesMessage realValue = (SamplesMessage) this.samples.get(realKey);
+    SamplesMessage realValue = this.samples.get(realKey);
     if(realValue == null) {
       // create the counter if doesn't exist
       SamplesMessage newValue =
@@ -698,24 +751,27 @@ public class Client {
 
   /**
    * Decrements the default counter by one.
+   * @throws MondemandException
    */
-  public void decrement() {
+  public void decrement() throws MondemandException {
     this.decrement(StatType.Counter, null, 1);
   }
 
   /**
    * Decrements the default counter by value
    * @param value the amount to decrement the counter by
+   * @throws MondemandException
    */
-  public void decrement(int value) {
+  public void decrement(int value) throws MondemandException {
     this.decrement(StatType.Counter, null, value);
   }
 
   /**
    * Decrements the specified counter by one.
    * @param key the name of the counter to decrement
+   * @throws MondemandException
    */
-  public void decrement(String key) {
+  public void decrement(String key) throws MondemandException {
     this.decrement(StatType.Counter, key, 1);
   }
 
@@ -723,12 +779,13 @@ public class Client {
    * Decrements the specified counter by the value specified.
    * @param key the name of the counter to decrement
    * @param value the amount to decrement the counter by
+   * @throws MondemandException
    */
-  public void decrement(String key, int value) {
+  public void decrement(String key, int value) throws MondemandException {
     this.decrement(StatType.Counter, key, value);
   }
 
-  public void decrement(StatType type, String key, int value) {
+  public void decrement(StatType type, String key, int value) throws MondemandException {
     this.increment(type, key, value * (-1));
   }
 
@@ -737,8 +794,8 @@ public class Client {
    * @param key the name of the counter key to set
    * @param value the value to set this counter to
    */
-  public void setKey(String key, int value) {
-    this.setKey(StatType.Gauge, key, (long) value);
+  public void setKey(String key, int value) throws MondemandException {
+    this.setKey(StatType.Gauge, key, value);
   }
 
   /**
@@ -746,16 +803,20 @@ public class Client {
    * @param key the name of the counter key to set
    * @param value the value to set this counter to
    */
-  public void setKey(String key, long value) {
-    this.setKey(StatType.Gauge, key, (long) value);
+  public void setKey(String key, long value) throws MondemandException {
+    this.setKey(StatType.Gauge, key, value);
   }
 
-  public void setKey(StatType type, String key, long value) {
+  public void setKey(StatType type, String key, long value) throws MondemandException {
     String realKey = key;
 
     if(realKey == null) {
       // determine the key from the calling class and line number
       realKey = ClassUtils.getCallingClass(CALLER_DEPTH);
+    }
+
+    if(!keyIsValid(realKey)) {
+      throw new MondemandException("key is invalid: " + realKey);
     }
 
     // create the HashMap if it doesn't exist
@@ -1159,7 +1220,9 @@ public class Client {
     String filename = name;
     StringBuffer formattedMsg = new StringBuffer();
 
-    if(message == null) return;
+    if(message == null) {
+      return;
+    }
     if(level < Level.OFF || level > Level.ALL) {
       errorHandler.handleError("Client.logReal() called by " +
           name + ":" + line + " with invalid log level: " + Integer.toString(level));
@@ -1188,7 +1251,7 @@ public class Client {
         String key = filename + FILE_LINE_DELIMITER + Integer.toString(line);
         if(this.messages.containsKey(key)) {
           // repeated message, increment the repeat counter
-          LogMessage msg = (LogMessage) this.messages.get(key);
+          LogMessage msg = this.messages.get(key);
           if(msg != null) {
             msg.setRepeat(msg.getRepeat() + 1);
             if(msg.getRepeat() % 999 == 0) {
@@ -1240,7 +1303,9 @@ public class Client {
    * Since we cannot assume transports are thread-safe, we make this method synchronized.
    */
   private synchronized void dispatchLogs() {
-    if (this.messages == null) return;
+    if (this.messages == null) {
+      return;
+    }
 
     try {
       Context[] contexts = this.contexts.values().toArray(new Context[0]);
