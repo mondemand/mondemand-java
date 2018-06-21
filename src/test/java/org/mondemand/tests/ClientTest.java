@@ -680,8 +680,8 @@ public class ClientTest {
   @Test
   public void testIsValid() throws NoSuchFieldException, SecurityException, IllegalArgumentException, IllegalAccessException {
     Client client = createClientNoTransports();
-    Field verifiedKeys = client.getClass().getDeclaredField("verifiedKeys");
-    verifiedKeys.setAccessible(true);
+    Field examinedKeys = client.getClass().getDeclaredField("examinedKeys");
+    examinedKeys.setAccessible(true);
 
     String[] validKeys = {"valid", "valid_with_underscore", "valid.with.dot", "valid-with-dash",
         "valid_with_numbers_090", "valid_with-all.chars090"};
@@ -698,7 +698,7 @@ public class ClientTest {
     for(String validKey : validKeys) {
       assertTrue(Client.isKeyValid(validKey));
       @SuppressWarnings("unchecked")
-      ConcurrentHashMap<String, Boolean> b = (ConcurrentHashMap<String, Boolean>)verifiedKeys.get(validKey);
+      ConcurrentHashMap<String, Boolean> b = (ConcurrentHashMap<String, Boolean>)examinedKeys.get(validKey);
       assertTrue( b.get(validKey) );
     }
     for(String invalidKey : invalidKeys) {
@@ -706,7 +706,7 @@ public class ClientTest {
       // null and empty string are not put in to the map
       if(invalidKey != null && !invalidKey.equals("")) {
         @SuppressWarnings("unchecked")
-        ConcurrentHashMap<String, Boolean> b = (ConcurrentHashMap<String, Boolean>)verifiedKeys.get(invalidKey);
+        ConcurrentHashMap<String, Boolean> b = (ConcurrentHashMap<String, Boolean>)examinedKeys.get(invalidKey);
         assertFalse(b.get(invalidKey));
       }
     }

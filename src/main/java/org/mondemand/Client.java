@@ -74,8 +74,8 @@ public class Client {
   private Thread emitterThread = null;
   private Integer maxNumMetrics = null;
 
-  // key is the verified key, value specifies if a key is valid or not
-  static private ConcurrentHashMap<String, Boolean> verifiedKeys = new ConcurrentHashMap<String, Boolean>();
+  // key is the examined key, value specifies if the key is valid or not
+  static private ConcurrentHashMap<String, Boolean> examinedKeys = new ConcurrentHashMap<String, Boolean>();
 
   /********************************
    * CONSTRUCTORS AND DESTRUCTORS *
@@ -420,10 +420,10 @@ public class Client {
       return false;
     }
     // look up the map first to avoid calling matcher when possible
-    Boolean valid = verifiedKeys.get(key);
+    Boolean valid = examinedKeys.get(key);
     if(valid == null) {
       valid = keyPattern.matcher(key).matches();
-      verifiedKeys.putIfAbsent(key, valid);
+      examinedKeys.putIfAbsent(key, valid);
     }
     return valid.booleanValue();
   }
