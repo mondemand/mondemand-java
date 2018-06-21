@@ -27,7 +27,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.mondemand.transport.LWESTransport;
@@ -74,6 +73,9 @@ public class Client {
   private ClientStatEmitter autoStatEmitter = null;
   private Thread emitterThread = null;
   private Integer maxNumMetrics = null;
+
+  // key is the verified key, value specifies if a key is valid or not
+  static private ConcurrentHashMap<String, Boolean> verifiedKeys = new ConcurrentHashMap<String, Boolean>();
 
   /********************************
    * CONSTRUCTORS AND DESTRUCTORS *
@@ -417,8 +419,13 @@ public class Client {
     if(key == null || key.isEmpty()) {
       return false;
     }
-    Matcher matcher = keyPattern.matcher(key);
-    return matcher.matches();
+    // look up the map first to avoid calling matcher when possible
+    Boolean valid = verifiedKeys.get(key);
+    if(valid == null) {
+      valid = keyPattern.matcher(key).matches();
+      verifiedKeys.putIfAbsent(key, valid);
+    }
+    return valid.booleanValue();
   }
 
   /**
