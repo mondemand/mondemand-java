@@ -36,6 +36,7 @@ import org.mondemand.TransportException;
 public class LWESTransport
   implements Transport
 {
+
   /********************
    * Constants        *
    ********************/
@@ -106,13 +107,16 @@ public class LWESTransport
     }
   }
 
+  @Override
   public void sendLogs (String programId,
                         LogMessage[] messages,
                         Context[] contexts)
     throws TransportException
   {
     if (messages == null || messages.length == 0
-        || contexts == null || emitterGroup == null) return;
+        || contexts == null || emitterGroup == null) {
+      return;
+    }
 
     try {
       // create the event and set parameters
@@ -163,6 +167,7 @@ public class LWESTransport
    * @param contexts - contexts
    * @throws TransportException
    */
+  @Override
   public void send(String programId, StatsMessage[] stats,
       SamplesMessage[] samples, Context[] contexts, Integer maxNumMetrics)
     throws TransportException
@@ -320,11 +325,13 @@ public class LWESTransport
     {
       statsMsg.setString("prog_id", programId);
       statsMsg.setUInt16("num", numMetrics);
-      statsMsg.setUInt16("ctxt_num", contexts.length);
-      for (int i = 0; i < contexts.length; ++i) {
-        statsMsg.setString("ctxt_k" + i, contexts[i].getKey());
-        statsMsg.setString("ctxt_v" + i, contexts[i].getValue());
+      int contextCount = 0;
+      for (Context context : contexts) {
+        statsMsg.setString("ctxt_k" + contextCount, context.getKey());
+        statsMsg.setString("ctxt_v" + contextCount, context.getValue());
+        ++contextCount;
       }
+      statsMsg.setUInt16("ctxt_num", contextCount);
 
       emitterGroup.emitToGroup(statsMsg);
 
@@ -370,12 +377,14 @@ public class LWESTransport
   private static final String PROG_ID_KEY  = "mondemand.prog_id";
   private static final String SRC_HOST_KEY = "mondemand.src_host";
 
+  @Override
   public void sendTrace (String programId,
                          Context[] contexts)
     throws TransportException
   {
-    if (contexts == null || emitterGroup == null)
+    if (contexts == null || emitterGroup == null) {
       return;
+    }
 
     try {
       Event traceMsg = emitterGroup.createEvent(TRACE_EVENT, false);
@@ -400,6 +409,7 @@ public class LWESTransport
   private static final String PERF_START_PREFIX = "start";
   private static final String PERF_END_PREFIX = "end";
 
+  @Override
   public void sendPerformanceTrace(String id, String callerLabel,
                                    String[] label, long[] start,
                                    long[] end, Context[] contexts)
@@ -447,6 +457,7 @@ public class LWESTransport
     }
   }
 
+  @Override
   public void shutdown()
     throws TransportException
   {

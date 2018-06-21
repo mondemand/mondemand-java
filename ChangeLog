@@ -1,3 +1,6 @@
+Version 8.0.0
+  * Reject invalid keys for stats, samples, and contexts
+
 Version 7.0.1
   * fixed NPE race condition when incrementing or adding samples
 

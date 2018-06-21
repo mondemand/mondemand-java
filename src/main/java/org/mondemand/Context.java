@@ -14,6 +14,8 @@ package org.mondemand;
 
 import java.io.Serializable;
 
+import static org.mondemand.Client.isKeyValid;
+
 public class Context implements Serializable {
   private static final long serialVersionUID = -6801370115780644951L;
   private String key = null;
@@ -27,32 +29,24 @@ public class Context implements Serializable {
   }
 
   /**
-   * @param key the key to set
-   */
-  public void setKey(String key) {
-    this.key = key;
-  }
-
-  /**
    * @return the value
    */
   public String getValue() {
     return value;
   }
 
-  /**
-   * @param value the value to set
-   */
-  public void setValue(String value) {
-    this.value = value;
-  }
-
-  public Context() {
-  }
-
-  public Context(String k, String v) {
+  public Context(String k, String v) throws MondemandException {
     key = k;
     value = v;
+    if(key == null) {
+      throw new MondemandException("key is null");
+    }
+    if(value == null || value.isEmpty()) {
+      throw new MondemandException("value is empty or null");
+    }
+    if(!isKeyValid(key)) {
+      throw new MondemandException("key is invalid: " + key);
+    }
   }
 
   @Override
@@ -66,23 +60,30 @@ public class Context implements Serializable {
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj)
+    if (this == obj) {
       return true;
-    if (obj == null)
+    }
+    if (obj == null) {
       return false;
-    if (getClass() != obj.getClass())
+    }
+    if (getClass() != obj.getClass()) {
       return false;
+    }
     Context other = (Context) obj;
     if (key == null) {
-      if (other.key != null)
+      if (other.key != null) {
         return false;
-    } else if (!key.equals(other.key))
+      }
+    } else if (!key.equals(other.key)) {
       return false;
+    }
     if (value == null) {
-      if (other.value != null)
+      if (other.value != null) {
         return false;
-    } else if (!value.equals(other.value))
+      }
+    } else if (!value.equals(other.value)) {
       return false;
+    }
     return true;
   }
 
