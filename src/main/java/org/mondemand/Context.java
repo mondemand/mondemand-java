@@ -33,7 +33,13 @@ public class Context implements Serializable {
     return value;
   }
 
-  public Context(String k, String v) {
+  public Context(String k, String v) throws MondemandException {
+    if(k == null) {
+      throw new MondemandException("key is null");
+    }
+    if(v == null) {
+      throw new MondemandException("value is null");
+    }
     key = k;
     value = v;
   }

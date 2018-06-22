@@ -250,6 +250,18 @@ public class ClientTest {
 
   @Test
   public void testBasicStructures() throws MondemandException {
+    // invalid contexts
+    try {
+      new Context(null, "value");
+      // should throw exception, fail otherwise
+      fail();
+    } catch(MondemandException e) {}
+    try {
+      new Context("key", null);
+      // should throw exception, fail otherwise
+      fail();
+    } catch(MondemandException e) {}
+
     Context ctxt = new Context("a", "b");
     assertEquals(ctxt.getKey(), "a");
     assertEquals(ctxt.getValue(), "b");
