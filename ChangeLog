@@ -1,3 +1,6 @@
+Version 8.0.1
+  * removed check for valid keys from contexts
+
 Version 8.0.0
   * Reject invalid keys for stats, samples, and contexts
 

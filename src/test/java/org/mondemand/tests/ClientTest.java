@@ -261,11 +261,6 @@ public class ClientTest {
       // should throw exception, fail otherwise
       fail();
     } catch(MondemandException e) {}
-    try {
-      new Context("invalid key", "value");
-      // should throw exception, fail otherwise
-      fail();
-    } catch(MondemandException e) {}
 
     Context ctxt = new Context("a", "b");
     assertEquals(ctxt.getKey(), "a");

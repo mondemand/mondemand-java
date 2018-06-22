@@ -341,16 +341,6 @@ public class Client {
    */
   public void addContext(String key, String value) throws MondemandException {
 
-    if(key == null) {
-      throw new MondemandException("key is null");
-    }
-    if(value == null || value.isEmpty()) {
-      throw new MondemandException("value is empty or null");
-    }
-    if(!isKeyValid(key)) {
-      throw new MondemandException("key is invalid: " + key);
-    }
-
     Context ctxt = new Context(key, value);
 
     if(contexts == null) {
