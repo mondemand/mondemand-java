@@ -14,8 +14,6 @@ package org.mondemand;
 
 import java.io.Serializable;
 
-import static org.mondemand.Client.isKeyValid;
-
 public class Context implements Serializable {
   private static final long serialVersionUID = -6801370115780644951L;
   private String key = null;
@@ -35,18 +33,9 @@ public class Context implements Serializable {
     return value;
   }
 
-  public Context(String k, String v) throws MondemandException {
+  public Context(String k, String v) {
     key = k;
     value = v;
-    if(key == null) {
-      throw new MondemandException("key is null");
-    }
-    if(value == null || value.isEmpty()) {
-      throw new MondemandException("value is empty or null");
-    }
-    if(!isKeyValid(key)) {
-      throw new MondemandException("key is invalid: " + key);
-    }
   }
 
   @Override

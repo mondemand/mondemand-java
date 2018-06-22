@@ -345,7 +345,7 @@ public class Client {
       throw new MondemandException("key is null");
     }
     if(value == null) {
-      throw new MondemandException("value is empty or null");
+      throw new MondemandException("value is null");
     }
 
     Context ctxt = new Context(key, value);
