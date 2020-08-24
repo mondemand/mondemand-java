@@ -25,10 +25,7 @@ public class DefaultErrorHandler implements ErrorHandler {
    * Writes MonDemand errors to standard error.
    */
   public void handleError(String error) {
-    if(error != null) {
-      System.err.println("MonDemand error: " + error);
-    }
-
+    this.handleError(error, null, null);
   }
 
   /**
@@ -36,13 +33,17 @@ public class DefaultErrorHandler implements ErrorHandler {
    * standard error.
    */
   public void handleError(String error, Exception e) {
+    this.handleError(error, e, null);
+  }
+
+  @Override
+  public void handleError(String error, Exception e, Context[] messageContext) {
     if(error != null) {
       System.err.println("MonDemand error: " + error);
     }
     if(e != null ) {
       e.printStackTrace(System.err);
     }
-
   }
 
 }

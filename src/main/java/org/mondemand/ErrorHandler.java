@@ -17,7 +17,8 @@ package org.mondemand;
  * @author Michael Lum
  */
 public interface ErrorHandler {
-  public void handleError(String error);
-  public void handleError(String error, Exception e);     
+  void handleError(String error);
+  void handleError(String error, Exception e);
+  void handleError(String error, Exception e, Context[] messageContext);
 }
 

@@ -1,3 +1,6 @@
+Version 8.0.2
+  * expose trace context in error handler in order to allow to use it in custom error handler
+
 Version 8.0.1
   * removed check for valid keys from contexts
 

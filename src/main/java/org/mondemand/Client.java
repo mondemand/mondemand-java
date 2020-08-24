@@ -452,7 +452,7 @@ public class Client {
    * @throws FileNotFoundException if config file could not be found
    * @throws IOException if config file could not be read
    * @throws TransportException if there was an error creating the LWESTransport
-   * @throws UknownHostException if a bad host is specified
+   * @throws UnknownHostException if a bad host is specified
    * @throws IllegalArgumentException if file does not exist, or if there is a
    *        problem reading the file, or either port or address is missing, or
    *        if port cannot be converted to number, or if addresses cannot be
@@ -1147,7 +1147,7 @@ public class Client {
         try {
           t.sendTrace(programId, contexts);
         } catch (TransportException te) {
-          errorHandler.handleError("Error calling Transport.sendTrace()", te);
+          errorHandler.handleError("Error calling Transport.sendTrace()", te, contexts);
         }
       }
 

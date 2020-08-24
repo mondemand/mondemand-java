@@ -1581,5 +1581,10 @@ public class ClientTest {
     public void handleError (String error, Exception e)
     {
     }
+
+    @Override
+    public void handleError(String error, Exception e, Context[] messageContext) {
+
+    }
   }
 }
